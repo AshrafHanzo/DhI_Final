@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+psycopg[binary]
+psycopg_pool
+python-dotenv
+pydantic
+pydantic-settings
+python-multipart
+passlib[bcrypt]
+python-jose[cryptography]
+alembic
+email-validator
+aiofiles

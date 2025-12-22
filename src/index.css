@@ -1,0 +1,236 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 210 15% 20%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 210 15% 20%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 15% 20%;
+
+    --primary: 192 65% 32%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 45 75% 52%;
+    --secondary-foreground: 210 15% 20%;
+
+    --muted: 210 10% 96%;
+    --muted-foreground: 210 10% 45%;
+
+    --accent: 220 75% 30%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 15% 90%;
+    --input: 210 15% 90%;
+    --ring: 192 65% 32%;
+
+    --radius: 0.75rem;
+
+    --gradient-primary: linear-gradient(135deg, hsl(192 65% 32%), hsl(220 75% 30%));
+    --gradient-accent: linear-gradient(135deg, hsl(45 75% 52%), hsl(30 80% 45%));
+    --gradient-hero: linear-gradient(135deg, hsl(192 65% 32% / 0.05), hsl(220 75% 30% / 0.1));
+
+    --shadow-elegant: 0 10px 40px -10px hsl(192 65% 32% / 0.2);
+    --shadow-glow: 0 0 60px hsl(192 65% 32% / 0.15);
+    --transition-smooth: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dark {
+    --background: 210 20% 10%;
+    --foreground: 0 0% 95%;
+
+    --card: 210 20% 12%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 210 20% 12%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 192 75% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 45 80% 60%;
+    --secondary-foreground: 210 20% 10%;
+
+    --muted: 210 15% 20%;
+    --muted-foreground: 210 10% 65%;
+
+    --accent: 220 80% 40%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 15% 25%;
+    --input: 210 15% 25%;
+    --ring: 192 75% 45%;
+  }
+}
+
+@layer utilities {
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  .gradient-accent {
+    background: var(--gradient-accent);
+  }
+
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+
+  .shadow-elegant {
+    box-shadow: var(--shadow-elegant);
+  }
+
+  .shadow-glow {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .transition-smooth {
+    transition: var(--transition-smooth);
+  }
+
+  .hover-lift {
+    @apply transition-all duration-300 hover:-translate-y-2 hover:shadow-glow;
+  }
+
+  .parallax-slow {
+    transform: translateZ(-1px) scale(2);
+  }
+
+  /* Glassmorphism effect */
+  .glass {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .dark .glass {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  /* 3D card tilt effect */
+  .card-3d {
+    transform-style: preserve-3d;
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .card-3d:hover {
+    transform: perspective(1000px) rotateX(2deg) rotateY(-2deg) translateY(-6px);
+  }
+
+  /* Premium glow effect */
+  .glow-gold {
+    box-shadow: 0 0 20px hsl(var(--secondary) / 0.3),
+      0 0 40px hsl(var(--secondary) / 0.2);
+  }
+
+  /* Animated gradient background */
+  .animated-gradient {
+    background: linear-gradient(45deg,
+        hsl(var(--primary) / 0.05),
+        hsl(var(--secondary) / 0.05),
+        hsl(var(--accent) / 0.05));
+    background-size: 400% 400%;
+    animation: gradient-shift 15s ease infinite;
+  }
+
+  @keyframes gradient-shift {
+
+    0%,
+    100% {
+      background-position: 0% 50%;
+    }
+
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+
+  /* Interactive button press */
+  .btn-press {
+    transition: transform 0.1s ease;
+  }
+
+  .btn-press:active {
+    transform: scaleY(0.99);
+  }
+
+  /* Underline slide animation */
+  .link-underline {
+    position: relative;
+  }
+
+  .link-underline::after {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 2px;
+    bottom: -2px;
+    left: 0;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: right;
+    transition: transform 0.3s ease;
+  }
+
+  .link-underline:hover::after {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+
+  /* Motion-safe utilities */
+  @media (prefers-reduced-motion: reduce) {
+    .motion-safe-only {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Mobile-friendly touch targets */
+  button,
+  a {
+    @apply touch-manipulation;
+  }
+
+  /* Prevent text size adjustment on mobile */
+  @media (max-width: 768px) {
+    body {
+      -webkit-text-size-adjust: 100%;
+      -moz-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+  }
+}
