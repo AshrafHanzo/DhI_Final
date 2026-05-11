@@ -15,7 +15,7 @@ import {
     Star,
     Calendar
 } from 'lucide-react';
-import { API_ENDPOINTS } from '@/config/api';
+import { API_ENDPOINTS, API_BASE_URL } from '@/config/api';
 
 interface RecruiterStats {
     recruiter: string;
@@ -43,12 +43,48 @@ export default function RecruiterDashboard() {
         const fetchStats = async () => {
             try {
                 setLoading(true);
+
+                // Fetch all recruiters from Admin API
+                const allRecruitersRes = await fetch(`${API_BASE_URL}/api/admin/recruiters`);
+                let allRecruiters: string[] = [];
+                if (allRecruitersRes.ok) {
+                    const recruitersData = await allRecruitersRes.json();
+                    allRecruiters = recruitersData
+                        .filter((r: any) => r.is_active !== false)
+                        .map((r: any) => r.name);
+                }
+
                 // Fetch recruiter-specific stats
                 const recruiterRes = await fetch(`${API_ENDPOINTS.DASHBOARD}recruiter-stats?period=${timePeriod}`);
+                let recruiterData: RecruiterStats[] = [];
                 if (recruiterRes.ok) {
-                    const recruiterData = await recruiterRes.json();
-                    setRecruiterStats(recruiterData);
+                    recruiterData = await recruiterRes.json();
                 }
+
+                // Merge: include all recruiters from admin, with stats if available
+                const statsMap = new Map(recruiterData.map(r => [r.recruiter, r]));
+                const mergedStats: RecruiterStats[] = allRecruiters.map(name => {
+                    const existingStats = statsMap.get(name);
+                    if (existingStats) {
+                        return existingStats;
+                    }
+                    return {
+                        recruiter: name,
+                        total_applications: 0,
+                        ready_to_interview: 0,
+                        selected: 0,
+                        joined: 0
+                    };
+                });
+
+                // Add any recruiters from stats that might not be in admin (edge case)
+                recruiterData.forEach(r => {
+                    if (!allRecruiters.includes(r.recruiter)) {
+                        mergedStats.push(r);
+                    }
+                });
+
+                setRecruiterStats(mergedStats);
 
                 // Fetch global stats for accurate totals
                 const globalRes = await fetch(API_ENDPOINTS.DASHBOARD);

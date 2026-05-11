@@ -29,6 +29,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import AdminSignup from "./pages/AdminSignup";
 import RecruiterDashboard from "./pages/RecruiterDashboard";
 import ResetPassword from "./pages/ResetPassword";
+import AdminSettings from "./pages/AdminSettings";
 
 const queryClient = new QueryClient();
 
@@ -94,6 +95,7 @@ const App = () => (
             <Route path="/selected" element={<ProtectedRoute><SelectedCandidates /></ProtectedRoute>} />
             <Route path="/joined" element={<ProtectedRoute><Joined /></ProtectedRoute>} />
             <Route path="/recruiter-dashboard" element={<ProtectedRoute><RecruiterDashboard /></ProtectedRoute>} />
+            <Route path="/admin-settings" element={<ProtectedRoute><AdminSettings /></ProtectedRoute>} />
             <Route path="/lockin" element={<ProtectedRoute><LockInTracking /></ProtectedRoute>} />
             <Route path="/performance" element={<ProtectedRoute><Performance /></ProtectedRoute>} />
 

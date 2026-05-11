@@ -47,7 +47,7 @@ const LandingPage2 = () => {
     if (window.fbq) {
       window.fbq('track', 'PageView');
     }
-    
+
     // Fetch active jobs from backend
     fetchJobs();
   }, []);
@@ -57,45 +57,43 @@ const LandingPage2 = () => {
       console.log("Fetching jobs from API...");
       const response = await fetch("https://api.dhicreativeservices.com/api/jobs/");
       console.log("Response status:", response.status);
-      
+
       if (response.ok) {
         const data = await response.json();
         console.log("All jobs from API:", data);
         console.log("Total jobs received:", data.length);
-        
-        // Filter for the 3 Alldigi Tech jobs
+
+        // Filter for the 3 Alldigi Tech jobs (normalize titles to trim whitespace/newlines)
         const targetJobs = [
-          { title: "Voice Call", company: "Alldigi_Tech" },
-          { title: "Non-Voice Call", company: "Alldigi_Tech" },
-          { title: "Field Sales Executive", company: "Alldigi_Tech" }
+          { title: "voice call", company: "alldigi_tech" },
+          { title: "non-voice call", company: "alldigi_tech" },
+          { title: "field sales executive", company: "alldigi_tech" }
         ];
-        
+
         const filteredJobs = data.filter((job: Job) => {
-          // Normalize by removing extra spaces and converting to lowercase
-          const jobTitle = (job.job_title || '').replace(/\s+/g, ' ').toLowerCase().trim();
-          const companyName = (job.company_name || job.company || '').replace(/\s+/g, ' ').toLowerCase().trim();
-          
+          // Normalize by removing extra spaces/newlines and converting to lowercase
+          const jobTitle = (job.job_title || '').replace(/[\s\n\r]+/g, ' ').toLowerCase().trim();
+          const companyName = (job.company_name || job.company || '').replace(/[\s\n\r]+/g, ' ').toLowerCase().trim();
+
           const isMatch = targetJobs.some(target => {
-            const targetTitle = target.title.replace(/\s+/g, ' ').toLowerCase().trim();
-            const targetCompany = target.company.replace(/\s+/g, ' ').toLowerCase().trim();
-            const matches = jobTitle === targetTitle && companyName === targetCompany;
-            
+            const matches = jobTitle === target.title && companyName === target.company;
+
             if (matches) {
               console.log(`✓ Matched: "${job.job_title}" - "${job.company_name || job.company}"`);
             }
-            
+
             return matches;
           });
-          
+
           return isMatch;
         });
-        
+
         console.log("Filtered jobs:", filteredJobs);
         console.log("Filtered jobs count:", filteredJobs.length);
-        
+
         // Verify all 3 target jobs are found
         targetJobs.forEach(target => {
-          const found = filteredJobs.find(j => 
+          const found = filteredJobs.find(j =>
             j.job_title.toLowerCase().trim() === target.title.toLowerCase().trim() &&
             (j.company_name || j.company || '').toLowerCase().trim() === target.company.toLowerCase().trim()
           );
@@ -103,7 +101,7 @@ const LandingPage2 = () => {
             console.warn(`⚠ Missing: "${target.title}" - "${target.company}"`);
           }
         });
-        
+
         setJobs(filteredJobs);
       } else {
         console.error("API response not OK:", response.status);
@@ -184,7 +182,7 @@ const LandingPage2 = () => {
       if (!response.ok) {
         throw new Error("Failed to submit application");
       }
-      
+
       // Track successful submission with Facebook Pixel
       if (window.fbq && selectedJob) {
         window.fbq('track', 'Lead', {
@@ -397,7 +395,7 @@ const LandingPage2 = () => {
               )}
             </Button>
 
-            
+
           </form>
         </div>
       </div>

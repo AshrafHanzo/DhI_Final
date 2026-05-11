@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
 import { Button } from '@/components/ui/button';
@@ -6,47 +6,16 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Users, CheckCircle2, XCircle, Clock, UserCheck, Briefcase, AlertCircle, TrendingUp, Trash2 } from 'lucide-react';
+import { Plus, Search, Users, CheckCircle2, XCircle, Clock, UserCheck, Briefcase, AlertCircle, TrendingUp, Trash2, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { API_ENDPOINTS, buildApiUrl } from '@/config/api';
+import { API_ENDPOINTS, buildApiUrl, API_BASE_URL } from '@/config/api';
 import { useAuth } from '@/contexts/AuthContext';
-
-const RECRUITERS = [
-  'Muni Divya',
-  'Surya K',
-  'Thameem Ansari',
-  'Nandhini Kumaravel',
-  'Dhivya V',
-  'Gokulakrishna V',
-  'Snehal Prakash',
-  'Selvaraj Veilumuthu'
-];
-
-const SOURCES = [
-  'Linked-in',
-  'Job hai',
-  'Apna',
-  'Meta',
-  'EarlyJobs',
-  'Others'
-];
-
-const SCREENING_STATUSES = [
-  'Applied',
-  'Ready To Interview',
-  'Call Back',
-  'Not Reachable',
-  'Wrong Number',
-  'Ringing No Response',
-  'Not Fit',
-  'Not Interested'
-];
 
 export default function Applications() {
   const navigate = useNavigate();
-  const { applications, fetchApplications } = useData();
+  const { applications, candidates, fetchApplications } = useData();
   const { toast } = useToast();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -62,13 +31,50 @@ export default function Applications() {
   const [bulkAssignTo, setBulkAssignTo] = useState('');
   const [editingComments, setEditingComments] = useState<{ [key: number]: string }>({});
 
+  // Dynamic data from Admin Settings
+  const [RECRUITERS, setRecruiters] = useState<string[]>([]);
+  const [SCREENING_STATUSES, setScreeningStatuses] = useState<string[]>([]);
+  const [SOURCES, setSources] = useState<string[]>([]);
+
+  // Fetch recruiters, screening statuses, and sources from API
+  useEffect(() => {
+    const fetchAdminData = async () => {
+      try {
+        const [recruitersRes, statusesRes, sourcesRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/admin/recruiters`),
+          fetch(`${API_BASE_URL}/api/admin/screening-statuses`),
+          fetch(`${API_BASE_URL}/api/admin/sourced-from`)
+        ]);
+
+        if (recruitersRes.ok) {
+          const data = await recruitersRes.json();
+          setRecruiters(data.filter((r: any) => r.is_active !== false).map((r: any) => r.name));
+        }
+
+        if (statusesRes.ok) {
+          const data = await statusesRes.json();
+          setScreeningStatuses(data.filter((s: any) => s.is_active !== false).map((s: any) => s.name));
+        }
+
+        if (sourcesRes.ok) {
+          const data = await sourcesRes.json();
+          setSources(data.filter((s: any) => s.is_active !== false).map((s: any) => s.name));
+        }
+      } catch (error) {
+        console.error('Error fetching admin data:', error);
+      }
+    };
+
+    fetchAdminData();
+  }, []);
+
   // Calculate screening stats (excluding 11/28/2025)
   const stats = useMemo(() => {
     // First filter out applications from 11/28/2025
     const validApplications = applications.filter((a: any) => a.applied_on !== '2025-11-28');
 
     const total = validApplications.filter((a: any) =>
-      a.screening_status !== 'Not Fit' && a.screening_status !== 'Not Interested' && a.screening_status !== 'Ready To Interview'
+      a.screening_status !== 'Not Fit' && a.screening_status !== 'Not Interested' && a.screening_status !== 'Interested'
     ).length;
     const applied = validApplications.filter((a: any) =>
       (a.screening_status === 'Applied' || !a.screening_status) && a.screening_status !== 'Not Fit' && a.screening_status !== 'Not Interested'
@@ -86,24 +92,28 @@ export default function Applications() {
       a.screening_status === 'Ringing No Response'
     ).length;
 
-    // Calculate today's and yesterday's counts
+    // Calculate today's and yesterday's counts using local date strings
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
 
+    // Format as YYYY-MM-DD in local timezone
+    const formatLocalDate = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    const todayStr = formatLocalDate(today);
+    const yesterdayStr = formatLocalDate(yesterday);
+
     const todayCount = validApplications.filter((a: any) => {
-      if (!a.applied_on) return false;
-      const appliedDate = new Date(a.applied_on);
-      appliedDate.setHours(0, 0, 0, 0);
-      return appliedDate.getTime() === today.getTime();
+      return a.applied_on === todayStr;
     }).length;
 
     const yesterdayCount = validApplications.filter((a: any) => {
-      if (!a.applied_on) return false;
-      const appliedDate = new Date(a.applied_on);
-      appliedDate.setHours(0, 0, 0, 0);
-      return appliedDate.getTime() === yesterday.getTime();
+      return a.applied_on === yesterdayStr;
     }).length;
 
     return { total, applied, callBack, notReachable, wrongNumber, ringingNoResponse, todayCount, yesterdayCount };
@@ -112,8 +122,8 @@ export default function Applications() {
   // Filter applications - exclude 'Not Fit', 'Not Interested' and 'Ready To Interview' from display
   const filteredApplications = useMemo(() => {
     return applications.filter((app: any) => {
-      // Hide if Not Fit, Not Interested, or already moved to Ready To Interview
-      if (app.screening_status === 'Not Fit' || app.screening_status === 'Not Interested' || app.screening_status === 'Ready To Interview') {
+      // Hide if Not Fit, Not Interested, or already moved to Interested (Ready To Interview)
+      if (app.screening_status === 'Not Fit' || app.screening_status === 'Not Interested' || app.screening_status === 'Interested') {
         return false;
       }
 
@@ -146,6 +156,35 @@ export default function Applications() {
       return dateB - dateA;
     });
   }, [applications, searchQuery, screeningStatusFilter, jobTitleFilter, companyFilter, assignedToFilter, sourcedFromFilter, appliedOnFilter]);
+
+  // Detect duplicate phone numbers
+  const duplicatePhones = useMemo(() => {
+    const phoneCount: Record<string, number> = {};
+
+    // Count occurrences of each phone number
+    applications.forEach((app: any) => {
+      if (app.candidate_phone) {
+        const phone = app.candidate_phone.replace(/\D/g, ''); // Normalize phone
+        if (phone.length >= 10) {
+          phoneCount[phone] = (phoneCount[phone] || 0) + 1;
+        }
+      }
+    });
+
+    // Return set of phones that appear more than once
+    return new Set(
+      Object.entries(phoneCount)
+        .filter(([_, count]) => count > 1)
+        .map(([phone]) => phone)
+    );
+  }, [applications]);
+
+  // Check if a phone number is a duplicate
+  const isDuplicatePhone = (phone: string | null | undefined): boolean => {
+    if (!phone) return false;
+    const normalizedPhone = phone.replace(/\D/g, '');
+    return normalizedPhone.length >= 10 && duplicatePhones.has(normalizedPhone);
+  };
 
   // Selection handlers
   const toggleSelectAll = () => {
@@ -200,6 +239,64 @@ export default function Applications() {
     }
   };
 
+  // Download resumes for selected applications
+  const handleDownloadResumes = async () => {
+    if (selectedApps.length === 0) {
+      toast({
+        title: 'Error',
+        description: 'Please select at least one application',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const selectedApplications = applications.filter((a: any) => selectedApps.includes(a.id));
+    const candidateIds = selectedApplications.map((a: any) => a.candidate_id).filter(Boolean);
+    const candidatesWithResume = candidates.filter((c: any) => candidateIds.includes(c.id) && c.resume_url);
+
+    if (candidatesWithResume.length === 0) {
+      toast({
+        title: 'No Resumes',
+        description: 'None of the selected candidates have resumes uploaded',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    toast({
+      title: 'Downloading',
+      description: `Downloading ${candidatesWithResume.length} resume(s)...`
+    });
+
+    // Download each resume with proper download behavior
+    for (let i = 0; i < candidatesWithResume.length; i++) {
+      const candidate = candidatesWithResume[i];
+      try {
+        // Add delay between downloads to prevent browser blocking
+        await new Promise(resolve => setTimeout(resolve, i * 800));
+
+        const response = await fetch(`${API_BASE_URL}${candidate.resume_url}`);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${candidate.full_name}_resume.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } catch (error) {
+        console.error(`Failed to download resume for ${candidate.full_name}:`, error);
+      }
+    }
+
+    toast({
+      title: 'Complete',
+      description: `Downloaded ${candidatesWithResume.length} resume(s)`
+    });
+  };
+
   // Update field handler
   const handleFieldUpdate = async (appId: number, field: string, value: string) => {
     try {
@@ -227,11 +324,35 @@ export default function Applications() {
 
   // Update screening status
   const handleScreeningStatusUpdate = async (appId: number, screeningStatus: string) => {
+    // Find the application to check validation
+    const app = applications.find((a: any) => a.id === appId);
+    const previousStatus = app?.screening_status || 'Under Screening';
+
+    // Validation: Require Assigned To and Applied On for Interested (Ready To Interview)
+    if (screeningStatus === 'Interested') {
+      if (!app?.sourced_by || app.sourced_by.trim() === '') {
+        toast({
+          title: 'Validation Error',
+          description: 'Please assign this application to a recruiter (Assigned To) before marking as Interested',
+          variant: 'destructive'
+        });
+        return;
+      }
+      if (!app?.applied_on || app.applied_on.trim() === '') {
+        toast({
+          title: 'Validation Error',
+          description: 'Please set the Applied On date before marking as Interested',
+          variant: 'destructive'
+        });
+        return;
+      }
+    }
+
     try {
       const updateData: any = { screening_status: screeningStatus };
 
-      // If Ready To Interview, also set interview_status to prepare for next stage
-      if (screeningStatus === 'Ready To Interview') {
+      // If Interested (Ready To Interview), also set interview_status to prepare for next stage
+      if (screeningStatus === 'Interested') {
         updateData.interview_status = 'Pending';
       }
 
@@ -245,20 +366,50 @@ export default function Applications() {
 
       await fetchApplications();
 
-      if (screeningStatus === 'Ready To Interview') {
+      // Undo function
+      const handleUndo = async () => {
+        try {
+          const undoData: any = { screening_status: previousStatus };
+          // If reverting from Interested, clear interview_status
+          if (screeningStatus === 'Interested' && previousStatus !== 'Interested') {
+            undoData.interview_status = null;
+          }
+          await fetch(buildApiUrl(API_ENDPOINTS.APPLICATIONS, appId), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(undoData)
+          });
+          await fetchApplications();
+          toast({
+            title: 'Undone',
+            description: `Status reverted to ${previousStatus}`
+          });
+        } catch (error) {
+          toast({
+            title: 'Error',
+            description: 'Failed to undo status change',
+            variant: 'destructive'
+          });
+        }
+      };
+
+      if (screeningStatus === 'Interested') {
         toast({
           title: 'Success',
-          description: 'Candidate moved to Ready for Interview section'
+          description: 'Candidate moved to Ready for Interview section',
+          action: <Button variant="outline" size="sm" onClick={handleUndo}>Undo</Button>
         });
       } else if (screeningStatus === 'Not Fit' || screeningStatus === 'Not Interested') {
         toast({
           title: `Marked as ${screeningStatus}`,
-          description: 'Candidate hidden from applications (retained in database)'
+          description: 'Candidate hidden from applications (retained in database)',
+          action: <Button variant="outline" size="sm" onClick={handleUndo}>Undo</Button>
         });
       } else {
         toast({
           title: 'Success',
-          description: `Screening status updated to ${screeningStatus}`
+          description: `Screening status updated to ${screeningStatus}`,
+          action: <Button variant="outline" size="sm" onClick={handleUndo}>Undo</Button>
         });
       }
     } catch (error) {
@@ -331,10 +482,51 @@ export default function Applications() {
     }
   };
 
+  // Bulk delete applications handler (Admin only)
+  const handleBulkDelete = async () => {
+    if (selectedApps.length === 0) {
+      toast({
+        title: 'Error',
+        description: 'Please select at least one application to delete',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to delete ${selectedApps.length} application(s)? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await Promise.all(
+        selectedApps.map(appId =>
+          fetch(buildApiUrl(API_ENDPOINTS.APPLICATIONS, appId), {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+          })
+        )
+      );
+
+      await fetchApplications();
+      const count = selectedApps.length;
+      setSelectedApps([]);
+      toast({
+        title: 'Deleted',
+        description: `Successfully deleted ${count} application(s)`
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete some applications',
+        variant: 'destructive'
+      });
+    }
+  };
+
   const getScreeningStatusIcon = (status: string) => {
     switch (status) {
       case 'Applied': return <AlertCircle className="w-4 h-4" />;
-      case 'Ready To Interview': return <CheckCircle2 className="w-4 h-4" />;
+      case 'Interested': return <CheckCircle2 className="w-4 h-4" />;
       case 'Call Back': return <Clock className="w-4 h-4" />;
       case 'Not Reachable': return <XCircle className="w-4 h-4" />;
       case 'Wrong Number': return <XCircle className="w-4 h-4" />;
@@ -348,7 +540,7 @@ export default function Applications() {
   const getScreeningStatusColor = (status: string) => {
     switch (status) {
       case 'Applied': return 'bg-sky-100 text-sky-700';
-      case 'Ready To Interview': return 'bg-green-100 text-green-700';
+      case 'Interested': return 'bg-green-100 text-green-700';
       case 'Call Back': return 'bg-amber-100 text-amber-700';
       case 'Not Reachable': return 'bg-orange-100 text-orange-700';
       case 'Wrong Number': return 'bg-rose-100 text-rose-700';
@@ -363,17 +555,32 @@ export default function Applications() {
     <div className="space-y-3 pb-8">
       {/* Page Header */}
       <div className="flex items-center justify-between px-6 pt-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Applications</h1>
-          <p className="text-sm text-muted-foreground">Manage all job applications and track candidate progress</p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Applications</h1>
+            <p className="text-sm text-muted-foreground">Manage all job applications and track candidate progress</p>
+          </div>
+          {/* Bulk Actions - Left Side */}
+          {selectedApps.length > 0 && (
+            <div className="flex items-center gap-2 ml-4 pl-4 border-l">
+              <Button onClick={handleDownloadResumes} size="sm" variant="outline" className="gap-2 border-blue-500 text-blue-600 hover:bg-blue-50">
+                <Download className="h-4 w-4" />
+                Download Resumes ({selectedApps.length})
+              </Button>
+              <Button onClick={() => setBulkAssignDialogOpen(true)} size="sm" variant="outline" className="gap-2">
+                <UserCheck className="h-4 w-4" />
+                Assign ({selectedApps.length})
+              </Button>
+              {isAdmin && (
+                <Button onClick={handleBulkDelete} size="sm" variant="destructive" className="gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  Delete ({selectedApps.length})
+                </Button>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex gap-2">
-          {isAdmin && selectedApps.length > 0 && (
-            <Button onClick={() => setBulkAssignDialogOpen(true)} size="sm" variant="outline" className="gap-2">
-              <UserCheck className="h-4 w-4" />
-              Assign ({selectedApps.length})
-            </Button>
-          )}
           <Button onClick={() => navigate('/add-application')} size="sm" className="gap-2">
             <Plus className="h-4 w-4" />
             Add Application
@@ -495,16 +702,14 @@ export default function Applications() {
                 <Table className="min-w-max">
                   <TableHeader className="sticky top-0 bg-white dark:bg-gray-950 z-10 border-b">
                     <TableRow className="h-8">
-                      {isAdmin && (
-                        <TableHead className="w-[40px] whitespace-nowrap py-0.5 text-xs">
-                          <input
-                            type="checkbox"
-                            checked={selectedApps.length === filteredApplications.length && filteredApplications.length > 0}
-                            onChange={toggleSelectAll}
-                            className="cursor-pointer"
-                          />
-                        </TableHead>
-                      )}
+                      <TableHead className="w-[40px] whitespace-nowrap py-0.5 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={selectedApps.length === filteredApplications.length && filteredApplications.length > 0}
+                          onChange={toggleSelectAll}
+                          className="cursor-pointer"
+                        />
+                      </TableHead>
                       <TableHead className="w-[40px] whitespace-nowrap py-0.5 text-xs">S.No</TableHead>
                       <TableHead className="min-w-[160px] whitespace-nowrap py-0.5 text-xs">Candidate</TableHead>
                       <TableHead className="min-w-[140px] whitespace-nowrap py-0.5 text-xs">Job Title</TableHead>
@@ -514,10 +719,9 @@ export default function Applications() {
                       <TableHead className="min-w-[120px] whitespace-nowrap py-0.5 text-xs">Sourced From</TableHead>
                       <TableHead className="min-w-[110px] whitespace-nowrap py-0.5 text-xs">Applied On</TableHead>
                       <TableHead className="min-w-[200px] whitespace-nowrap py-0.5 text-xs">Comments</TableHead>
-                      {isAdmin && <TableHead className="w-[60px] whitespace-nowrap py-0.5 text-xs">Actions</TableHead>}
                     </TableRow>
                     <TableRow className="h-9 bg-gray-50 dark:bg-gray-900">
-                      {isAdmin && <TableHead className="py-0.5"></TableHead>}
+                      <TableHead className="py-0.5"></TableHead>
                       <TableHead className="py-0.5"></TableHead>
                       <TableHead className="py-0.5"></TableHead>
                       <TableHead className="py-0.5">
@@ -545,11 +749,11 @@ export default function Applications() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="all" className="text-xs">All Status</SelectItem>
-                            <SelectItem value="Applied" className="text-xs">Applied</SelectItem>
-                            <SelectItem value="Call Back" className="text-xs">Call Back</SelectItem>
-                            <SelectItem value="Not Reachable" className="text-xs">Not Reachable</SelectItem>
-                            <SelectItem value="Wrong Number" className="text-xs">Wrong Number</SelectItem>
-                            <SelectItem value="Ringing No Response" className="text-xs">Ringing No Response</SelectItem>
+                            {SCREENING_STATUSES.map((status) => (
+                              <SelectItem key={status} value={status} className="text-xs">
+                                {status}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </TableHead>
@@ -599,13 +803,12 @@ export default function Applications() {
                         />
                       </TableHead>
                       <TableHead className="py-0.5"></TableHead>
-                      {isAdmin && <TableHead className="py-0.5"></TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredApplications.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={isAdmin ? 11 : 10} className="h-32 text-center text-muted-foreground">
+                        <TableCell colSpan={10} className="h-32 text-center text-muted-foreground">
                           No applications found
                         </TableCell>
                       </TableRow>
@@ -613,28 +816,33 @@ export default function Applications() {
                       filteredApplications.map((app: any, index: number) => (
                         <TableRow
                           key={app.id}
-                          className="cursor-pointer hover:bg-muted/50 h-10"
-                          onClick={() => navigate(`/applications/${app.id}`)}
+                          className={`cursor-pointer hover:bg-muted/50 h-10 ${isDuplicatePhone(app.candidate_phone) ? 'bg-orange-50 border-l-4 border-l-orange-400' : ''}`}
+                          onClick={() => window.open(`/applications/${app.id}`, '_blank')}
                         >
-                          {isAdmin && (
-                            <TableCell className="py-1.5" onClick={(e) => e.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                checked={selectedApps.includes(app.id)}
-                                onChange={() => toggleSelectApp(app.id)}
-                                className="cursor-pointer"
-                              />
-                            </TableCell>
-                          )}
+                          <TableCell className="py-1.5" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selectedApps.includes(app.id)}
+                              onChange={() => toggleSelectApp(app.id)}
+                              className="cursor-pointer"
+                            />
+                          </TableCell>
                           <TableCell className="font-medium py-1.5 text-xs">{index + 1}</TableCell>
                           <TableCell className="py-1.5">
                             <div className="flex items-center gap-2">
-                              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
+                              <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs ${isDuplicatePhone(app.candidate_phone) ? 'bg-orange-500 text-white' : 'bg-primary text-primary-foreground'}`}>
                                 {app.candidate_name?.charAt(0) || 'A'}
                               </div>
                               <div>
                                 <div className="font-medium text-sm">{app.candidate_name || 'N/A'}</div>
-                                <div className="text-xs text-muted-foreground">{app.candidate_phone || '-'}</div>
+                                <div className="flex items-center gap-1">
+                                  <span className={`text-xs ${isDuplicatePhone(app.candidate_phone) ? 'text-orange-600 font-medium' : 'text-muted-foreground'}`}>
+                                    {app.candidate_phone || '-'}
+                                  </span>
+                                  {isDuplicatePhone(app.candidate_phone) && (
+                                    <span className="text-[9px] px-1.5 py-0.5 bg-orange-500 text-white rounded-full font-medium">Duplicate</span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </TableCell>
@@ -731,18 +939,6 @@ export default function Applications() {
                               className="w-full h-7 text-xs"
                             />
                           </TableCell>
-                          {isAdmin && (
-                            <TableCell onClick={(e) => e.stopPropagation()} className="py-1.5">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                onClick={(e) => handleDeleteApplication(app.id, app.candidate_name, e)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </TableCell>
-                          )}
                         </TableRow>
                       ))
                     )}

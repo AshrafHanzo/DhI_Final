@@ -430,7 +430,7 @@ export default function Dashboard() {
                   <div
                     key={candidate.id}
                     className="flex items-center justify-between p-3 bg-gradient-to-r from-slate-50 to-transparent dark:from-slate-900/50 rounded-lg hover:from-purple-50 dark:hover:from-purple-950/20 transition-all cursor-pointer border border-transparent hover:border-purple-200"
-                    onClick={() => navigate(`/candidates/${candidate.id}`)}
+                    onClick={() => window.open(`/candidates/${candidate.id}`, '_blank')}
                   >
                     <div className="flex items-center gap-3">
                       <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-semibold">

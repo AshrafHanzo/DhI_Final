@@ -1,9 +1,10 @@
 # app/routes/applications.py
 
-from fastapi import APIRouter, HTTPException
-from typing import List
+from fastapi import APIRouter, HTTPException, Body
+from typing import List, Optional
 from app.schemas.application import ApplicationCreate, ApplicationOut
 from app.db import fetch_one, fetch_all, execute
+from pydantic import BaseModel
 
 router = APIRouter(tags=["Applications"])
 
@@ -22,17 +23,70 @@ STATUS_FLOW = {
 
 
 # ------------------------------------------------
+# RPA SYNC ENDPOINTS (Must be before dynamic routes)
+# ------------------------------------------------
+
+@router.get("/pending-sync", tags=["RPA Integration"])
+async def get_pending_sync_applications():
+    """
+    Get all applications that have changed status and need syncing to External Portal.
+    """
+    sql = """
+    SELECT 
+        a.id, a.candidate_id, a.status, a.screening_status, 
+        a.interview_status, a.joined_status, a.updated_at,
+        c.full_name AS candidate_name, c.phone_number, c.email_address,
+        j.job_title, j.company_name
+    FROM applications a
+    LEFT JOIN candidates c ON a.candidate_id = c.id
+    LEFT JOIN jobs j ON a.job_id = j.id
+    WHERE a.sync_needed = 1
+    ORDER BY a.updated_at ASC
+    LIMIT 100;
+    """
+    return await fetch_all(sql)
+
+
+class SyncAck(BaseModel):
+    application_ids: List[int]
+
+@router.post("/ack-sync", tags=["RPA Integration"])
+async def acknowledge_sync(data: SyncAck):
+    """
+    RPA acknowledges that it has synced these IDs.
+    Sets sync_needed = 0.
+    """
+    if not data.application_ids:
+        return {"message": "No IDs provided", "count": 0}
+        
+    # Convert list of IDs to tuple for SQL IN clause
+    ids_tuple = tuple(data.application_ids)
+    
+    # Handle single item tuple syntax (1,)
+    if len(ids_tuple) == 1:
+         sql = "UPDATE applications SET sync_needed = 0 WHERE id = %s"
+         await execute(sql, [ids_tuple[0]])
+    else:
+        sql = f"UPDATE applications SET sync_needed = 0 WHERE id IN {ids_tuple}"
+        await execute(sql)
+        
+    return {"message": "Sync acknowledged", "count": len(data.application_ids)}
+
+
+# ------------------------------------------------
 # CREATE APPLICATION
 # ------------------------------------------------
 @router.post("/", response_model=ApplicationOut)
 async def create_application(data: ApplicationCreate):
 
+    # sync_needed defaults to 1 (True) for new applications so RPA picks them up
     sql = """
     INSERT INTO applications (
         candidate_id, job_id, candidate_name, job_title, company,
-        status, sourced_by, sourced_from, assigned_to, applied_on, comments
+        status, sourced_by, sourced_from, assigned_to, applied_on, comments,
+        sync_needed
     )
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1)
     RETURNING
         id, candidate_id, job_id, candidate_name, job_title, company,
         status, sourced_by, sourced_from, assigned_to, applied_on, comments,
@@ -54,47 +108,50 @@ async def create_application(data: ApplicationCreate):
 # ------------------------------------------------
 @router.get("/", response_model=List[ApplicationOut])
 async def list_applications():
+    try:
+        sql = """
+        SELECT
+            a.id,
+            a.candidate_id,
+            a.job_id,
+            a.candidate_name,
+            a.job_title,
+            a.company,
+            a.status,
+            a.sourced_by,
+            a.sourced_from,
+            a.assigned_to,
+            a.applied_on,
+            a.comments,
+            a.screening_status,
+            a.interview_status,
+            a.interview_date,
+            a.joined_status,
+            a.joining_date,
+            a.created_at,
+            a.updated_at,
 
-    sql = """
-    SELECT
-        a.id,
-        a.candidate_id,
-        a.job_id,
-        a.candidate_name,
-        a.job_title,
-        a.company,
-        a.status,
-        a.sourced_by,
-        a.sourced_from,
-        a.assigned_to,
-        a.applied_on,
-        a.comments,
-        a.screening_status,
-        a.interview_status,
-        a.interview_date,
-        a.joined_status,
-        a.joining_date,
-        a.created_at,
-        a.updated_at,
+            -- Candidate info
+            c.phone_number AS candidate_phone,
+            c.city AS candidate_city,
+            c.gender AS candidate_gender,
 
-        -- Candidate info
-        c.phone_number AS candidate_phone,
-        c.city AS candidate_city,
-        c.gender AS candidate_gender,
+            -- Job info
+            j.address AS job_location,
+            CONCAT('₹', j.salary_min::text, ' - ', '₹', j.salary_max::text) AS job_salary,
+            j.commission AS job_commission,
+            j.tenure AS job_tenure
 
-        -- Job info
-        j.address AS job_location,
-        CONCAT('₹', j.salary_min::text, ' - ', '₹', j.salary_max::text) AS job_salary,
-        j.commission AS job_commission,
-        j.tenure AS job_tenure
+        FROM applications a
+        LEFT JOIN candidates c ON a.candidate_id = c.id
+        LEFT JOIN jobs j ON a.job_id = j.id
+        ORDER BY a.id DESC;
+        """
 
-    FROM applications a
-    LEFT JOIN candidates c ON a.candidate_id = c.id
-    LEFT JOIN jobs j ON a.job_id = j.id
-    ORDER BY a.id DESC;
-    """
-
-    return await fetch_all(sql)
+        return await fetch_all(sql)
+    except Exception as e:
+        print(f"Error fetching applications: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 # ------------------------------------------------
@@ -169,9 +226,10 @@ async def update_application_status(application_id: int, new_status: str):
             detail=f"Invalid transition: '{current_status}' → '{new_status}'. Allowed: {allowed_next}"
         )
 
+    # Update status AND set sync_needed = 1
     sql = """
     UPDATE applications
-    SET status = %s, updated_at = NOW()
+    SET status = %s, updated_at = NOW(), sync_needed = 1
     WHERE id = %s
     RETURNING
         id, candidate_id, job_id, candidate_name, job_title, company,
@@ -208,15 +266,26 @@ async def update_application(application_id: int, updates: dict):
     set_clauses = []
     params = []
     
+    # Check if a status field is being updated to trigger sync
+    status_changed = False
+    
     for key, value in updates.items():
         if key in allowed_fields:
             set_clauses.append(f"{key} = %s")
             params.append(value)
+            
+            if key in ["status", "screening_status", "interview_status", "joined_status"]:
+                status_changed = True
     
     if not set_clauses:
         raise HTTPException(status_code=400, detail="No valid fields to update")
     
     set_clauses.append("updated_at = NOW()")
+    
+    # Only set sync_needed if a status field was changed
+    if status_changed:
+        set_clauses.append("sync_needed = 1")
+        
     params.append(application_id)
     
     sql = f"""

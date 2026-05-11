@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+venv/
+.venv/
+env/
+.env
+.env.production
+bun.lockb
+package-lock.json
+
+# Builds
+dist/
+build/
+.next/
+
+# Project Specific
+Employee_Portal/uploads/
+Employee_Portal/backup_uploads/
+Employee_Portal/ats-backend/venv/
+Employee_Portal/ats-frontend/node_modules/
+Employee_Portal/ats-frontend/dist/
+
+# OS Files
+.DS_Store
+Thumbs.db

@@ -19,6 +19,7 @@ const Illustrations = () => {
     { id: "character", name: "Character & Mascot Design", count: 6 },
     { id: "emblem", name: "Emblem Illustration", count: 4 },
     { id: "high-detailed", name: "High Detailed Vector", count: 3 },
+    { id: "image-editing", name: "Image Editing Services", count: 14 },
     { id: "line-art", name: "Line Art", count: 4 },
     { id: "photo-vector", name: "Photo to Vector", count: 4 },
     { id: "raster-vector", name: "Raster to Vector", count: 2 },
@@ -44,6 +45,22 @@ const Illustrations = () => {
     { id: 10, src: "/illustrations/high-detailed/High detailed vector_02 copy.png", title: "High Detailed Vector Design 1", category: "high-detailed" },
     { id: 11, src: "/illustrations/high-detailed/High detailed vector_03 copy.png", title: "High Detailed Vector Design 2", category: "high-detailed" },
     { id: 12, src: "/illustrations/high-detailed/High detailed vector_04 copy.png", title: "High Detailed Vector Design 3", category: "high-detailed" },
+
+    // Image Editing Services
+    { id: 22, src: "/illustrations/Image editing services/Image Editing Services_Page_02.png", title: "Image Editing Services 1", category: "image-editing" },
+    { id: 23, src: "/illustrations/Image editing services/Image Editing Services_Page_03.png", title: "Image Editing Services 2", category: "image-editing" },
+    { id: 24, src: "/illustrations/Image editing services/Image Editing Services_Page_04.png", title: "Image Editing Services 3", category: "image-editing" },
+    { id: 25, src: "/illustrations/Image editing services/Image Editing Services_Page_05.png", title: "Image Editing Services 4", category: "image-editing" },
+    { id: 26, src: "/illustrations/Image editing services/Image Editing Services_Page_06.png", title: "Image Editing Services 5", category: "image-editing" },
+    { id: 27, src: "/illustrations/Image editing services/Image Editing Services_Page_07.png", title: "Image Editing Services 6", category: "image-editing" },
+    { id: 28, src: "/illustrations/Image editing services/Image Editing Services_Page_08.png", title: "Image Editing Services 7", category: "image-editing" },
+    { id: 29, src: "/illustrations/Image editing services/Image Editing Services_Page_09.png", title: "Image Editing Services 8", category: "image-editing" },
+    { id: 30, src: "/illustrations/Image editing services/Image Editing Services_Page_10.png", title: "Image Editing Services 9", category: "image-editing" },
+    { id: 31, src: "/illustrations/Image editing services/Image Editing Services_Page_11.png", title: "Image Editing Services 10", category: "image-editing" },
+    { id: 32, src: "/illustrations/Image editing services/Image Editing Services_Page_12.png", title: "Image Editing Services 11", category: "image-editing" },
+    { id: 33, src: "/illustrations/Image editing services/Image Editing Services_Page_13.png", title: "Image Editing Services 12", category: "image-editing" },
+    { id: 34, src: "/illustrations/Image editing services/Image Editing Services_Page_15.png", title: "Image Editing Services 13", category: "image-editing" },
+    { id: 35, src: "/illustrations/Image editing services/Image Editing Services_Page_16.png", title: "Image Editing Services 14", category: "image-editing" },
 
     // Line Art
     { id: 13, src: "/illustrations/line-art/Line_Art_Before_After.jpeg", title: "Line Art Before & After", category: "line-art" },
@@ -106,8 +123,8 @@ const Illustrations = () => {
                 key={category.id}
                 onClick={() => setActiveCategory(category.id)}
                 className={`px-4 sm:px-6 py-2 sm:py-3 rounded-xl text-sm sm:text-base font-semibold transition-all duration-300 ${activeCategory === category.id
-                    ? "bg-gradient-to-r from-primary to-accent text-white shadow-lg"
-                    : "bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground"
+                  ? "bg-gradient-to-r from-primary to-accent text-white shadow-lg"
+                  : "bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground"
                   }`}
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}

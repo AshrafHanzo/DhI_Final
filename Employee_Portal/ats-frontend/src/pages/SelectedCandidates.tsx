@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { ArrowLeft, Search, Users, CheckCircle2, Calendar, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { API_ENDPOINTS, buildApiUrl } from '@/config/api';
+import { API_ENDPOINTS, buildApiUrl, API_BASE_URL } from '@/config/api';
 
 export default function SelectedCandidates() {
   const navigate = useNavigate();
@@ -23,17 +23,23 @@ export default function SelectedCandidates() {
   const [selectedCandidate, setSelectedCandidate] = useState<any>(null);
   const [joiningDate, setJoiningDate] = useState('');
   const [actionType, setActionType] = useState<'Joined' | 'Not Joined' | null>(null);
+  const [RECRUITERS, setRecruiters] = useState<string[]>([]);
 
-  const RECRUITERS = [
-    'Muni Divya',
-    'Surya K',
-    'Thameem Ansari',
-    'Nandhini Kumaravel',
-    'Dhivya V',
-    'Gokulakrishna V',
-    'Snehal Prakash',
-    'Selvaraj Veilumuthu'
-  ];
+  // Fetch recruiters from API
+  useEffect(() => {
+    const fetchRecruiters = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/admin/recruiters`);
+        if (res.ok) {
+          const data = await res.json();
+          setRecruiters(data.filter((r: any) => r.is_active !== false).map((r: any) => r.name));
+        }
+      } catch (error) {
+        console.error('Error fetching recruiters:', error);
+      }
+    };
+    fetchRecruiters();
+  }, []);
 
   // Filter applications with status = 'Selected' (exclude those moved to Joined or marked Not Joined)
   const selectedApplications = useMemo(() => {
@@ -44,6 +50,11 @@ export default function SelectedCandidates() {
 
   // Handle status update
   const handleStatusUpdate = async (appId: number, joinedStatus: string, joiningDate?: string) => {
+    const app = applications.find((a: any) => a.id === appId);
+    const previousStatus = app?.status;
+    const previousJoinedStatus = app?.joined_status;
+    const previousJoiningDate = app?.joining_date;
+
     try {
       const updateData: any = {};
 
@@ -64,9 +75,36 @@ export default function SelectedCandidates() {
 
       await fetchApplications();
 
+      // Undo function
+      const handleUndo = async () => {
+        try {
+          await fetch(buildApiUrl(API_ENDPOINTS.APPLICATIONS, appId), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              status: previousStatus || 'Selected',
+              joined_status: previousJoinedStatus || null,
+              joining_date: previousJoiningDate || null
+            })
+          });
+          await fetchApplications();
+          toast({
+            title: 'Undone',
+            description: 'Status reverted successfully'
+          });
+        } catch (error) {
+          toast({
+            title: 'Error',
+            description: 'Failed to undo status change',
+            variant: 'destructive'
+          });
+        }
+      };
+
       toast({
         title: 'Success',
-        description: 'Candidate moved to Joined Candidates section with joining date set'
+        description: 'Candidate moved to Joined Candidates section with joining date set',
+        action: <Button variant="outline" size="sm" onClick={handleUndo}>Undo</Button>
       });
     } catch (error) {
       toast({
@@ -194,7 +232,7 @@ export default function SelectedCandidates() {
                         <TableRow
                           key={app.id}
                           className="hover:bg-gray-50 cursor-pointer"
-                          onClick={() => navigate(`/applications/${app.id}`)}
+                          onClick={() => window.open(`/applications/${app.id}`, '_blank')}
                         >
                           <TableCell className="font-medium">{index + 1}</TableCell>
                           <TableCell>
@@ -233,9 +271,33 @@ export default function SelectedCandidates() {
                                     });
                                     if (!res.ok) throw new Error('Failed to update');
                                     await fetchApplications();
+
+                                    // Undo function
+                                    const handleUndo = async () => {
+                                      try {
+                                        await fetch(buildApiUrl(API_ENDPOINTS.APPLICATIONS, app.id), {
+                                          method: 'PUT',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ joined_status: null })
+                                        });
+                                        await fetchApplications();
+                                        toast({
+                                          title: 'Undone',
+                                          description: 'Status reverted successfully'
+                                        });
+                                      } catch (error) {
+                                        toast({
+                                          title: 'Error',
+                                          description: 'Failed to undo',
+                                          variant: 'destructive'
+                                        });
+                                      }
+                                    };
+
                                     toast({
                                       title: 'Success',
-                                      description: 'Candidate marked as Not Joined'
+                                      description: 'Candidate marked as Not Joined',
+                                      action: <Button variant="outline" size="sm" onClick={handleUndo}>Undo</Button>
                                     });
                                   } catch (error) {
                                     toast({

@@ -42,13 +42,9 @@ export const getEmployeePortalUrl = (): string => {
         return `${protocol}//${hostname}:8081`;
     }
 
-    // For production domains, you might use a subdomain
-    // Example: main site = dhicreative.com, portal = portal.dhicreative.com
-    // Uncomment and customize this if needed:
-    // return `${protocol}//portal.${hostname}`;
-
-    // Default: same domain with port 8081
-    return `${protocol}//${hostname}:8081`;
+    // For production domains, use the portal subdomain
+    // Example: main site = dhicreativeservices.com, portal = portal.dhicreativeservices.com
+    return `${protocol}//portal.${hostname}`;
 };
 
 /**

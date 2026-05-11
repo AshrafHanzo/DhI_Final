@@ -63,9 +63,9 @@ const LandingPage3 = () => {
         console.log("All jobs from API:", data);
         console.log("Total jobs received:", data.length);
 
-        // Filter for Justdial company jobs only
+        // Filter for Justdial company jobs only (normalize whitespace/newlines)
         const justdialJobs = data.filter((job: Job) => {
-          const companyName = (job.company_name || job.company || '').toLowerCase().trim();
+          const companyName = (job.company_name || job.company || '').replace(/[\s\n\r]+/g, ' ').toLowerCase().trim();
           const isJustdial = companyName.includes('justdial');
 
           if (isJustdial) {

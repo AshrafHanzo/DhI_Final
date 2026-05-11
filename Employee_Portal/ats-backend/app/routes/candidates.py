@@ -305,6 +305,7 @@ async def update_candidate(
 # PATCH CANDIDATE (Flexible JSON update for inline editing)
 # =====================================================
 @router.patch("/{candidate_id}", response_model=CandidateOut)
+@router.patch("/{candidate_id}/", response_model=CandidateOut)
 async def patch_candidate(candidate_id: int, updates: dict):
     # Check if candidate exists
     existing = await fetch_one(

@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -8,16 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Search, Users, Calendar, CheckCircle2, XCircle, Clock, TrendingUp, Briefcase } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { API_ENDPOINTS, buildApiUrl } from '@/config/api';
-
-const INTERVIEW_STATUSES = [
-  'Scheduled',
-  'Hold',
-  'Not Attended',
-  'Attended',
-  'Selected',
-  'Rejected'
-];
+import { API_ENDPOINTS, buildApiUrl, API_BASE_URL } from '@/config/api';
 
 export default function Interview() {
   const navigate = useNavigate();
@@ -26,25 +18,39 @@ export default function Interview() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sourcedByFilter, setSourcedByFilter] = useState('all');
+  const [RECRUITERS, setRecruiters] = useState<string[]>([]);
+  const [INTERVIEW_STATUSES, setInterviewStatuses] = useState<string[]>([]);
 
-  const RECRUITERS = [
-    'Muni Divya',
-    'Surya K',
-    'Thameem Ansari',
-    'Nandhini Kumaravel',
-    'Dhivya V',
-    'Gokulakrishna V',
-    'Snehal Prakash',
-    'Selvaraj Veilumuthu'
-  ];
+  // Fetch recruiters and interview statuses from API
+  useEffect(() => {
+    const fetchAdminData = async () => {
+      try {
+        const [recruitersRes, statusesRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/admin/recruiters`),
+          fetch(`${API_BASE_URL}/api/admin/interview-statuses`)
+        ]);
 
-  // Filter applications with interview_status = Scheduled, Hold, Not Attended, or Attended (exclude Selected and Rejected)
+        if (recruitersRes.ok) {
+          const data = await recruitersRes.json();
+          setRecruiters(data.filter((r: any) => r.is_active !== false).map((r: any) => r.name));
+        }
+
+        if (statusesRes.ok) {
+          const data = await statusesRes.json();
+          setInterviewStatuses(data.filter((s: any) => s.is_active !== false).map((s: any) => s.name));
+        }
+      } catch (error) {
+        console.error('Error fetching admin data:', error);
+      }
+    };
+    fetchAdminData();
+  }, []);
+
+  // Filter applications with interview_status set (exclude Selected, Rejected, and Pending as they belong to other pages)
   const interviewApplications = useMemo(() => {
     return applications.filter((a: any) =>
-      (a.interview_status === 'Scheduled' ||
-        a.interview_status === 'Hold' ||
-        a.interview_status === 'Not Attended' ||
-        a.interview_status === 'Attended') &&
+      a.interview_status &&
+      a.interview_status !== 'Pending' &&
       a.interview_status !== 'Selected' &&
       a.interview_status !== 'Rejected'
     );
@@ -81,7 +87,12 @@ export default function Interview() {
   }, [interviewApplications, searchQuery, statusFilter, sourcedByFilter]);
 
   // Update interview status and date
-  const handleInterviewStatusUpdate = async (appId: number, interviewStatus: string, interviewDate?: string) => {
+  const handleInterviewStatusUpdate = async (appId: number, interviewStatus: string, interviewDate?: string, currentApp?: any) => {
+    // Find app to get previous status
+    const app = currentApp || applications.find((a: any) => a.id === appId);
+    const previousStatus = app?.interview_status || 'Scheduled';
+    const previousAppStatus = app?.status;
+
     try {
       const updateData: any = { interview_status: interviewStatus };
       if (interviewDate) {
@@ -103,20 +114,49 @@ export default function Interview() {
 
       await fetchApplications();
 
+      // Undo function
+      const handleUndo = async () => {
+        try {
+          const undoData: any = { interview_status: previousStatus };
+          if (interviewStatus === 'Selected') {
+            undoData.status = previousAppStatus || 'Applied';
+          }
+          await fetch(buildApiUrl(API_ENDPOINTS.APPLICATIONS, appId), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(undoData)
+          });
+          await fetchApplications();
+          toast({
+            title: 'Undone',
+            description: `Status reverted to ${previousStatus}`
+          });
+        } catch (error) {
+          toast({
+            title: 'Error',
+            description: 'Failed to undo status change',
+            variant: 'destructive'
+          });
+        }
+      };
+
       if (interviewStatus === 'Selected') {
         toast({
           title: 'Success',
-          description: 'Candidate moved to Selected Candidates section'
+          description: 'Candidate moved to Selected Candidates section',
+          action: <Button variant="outline" size="sm" onClick={handleUndo}>Undo</Button>
         });
       } else if (interviewStatus === 'Rejected') {
         toast({
           title: 'Marked as Rejected',
-          description: 'Candidate hidden from list (retained in database)'
+          description: 'Candidate hidden from list (retained in database)',
+          action: <Button variant="outline" size="sm" onClick={handleUndo}>Undo</Button>
         });
       } else {
         toast({
           title: 'Success',
-          description: `Interview status updated to ${interviewStatus}`
+          description: `Interview status updated to ${interviewStatus}`,
+          action: <Button variant="outline" size="sm" onClick={handleUndo}>Undo</Button>
         });
       }
     } catch (error) {
@@ -286,10 +326,11 @@ export default function Interview() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Interview Status</SelectItem>
-                  <SelectItem value="Scheduled">Scheduled</SelectItem>
-                  <SelectItem value="Hold">Hold</SelectItem>
-                  <SelectItem value="Not Attended">Not Attended</SelectItem>
-                  <SelectItem value="Attended">Attended</SelectItem>
+                  {INTERVIEW_STATUSES.map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {status}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Select value={sourcedByFilter} onValueChange={setSourcedByFilter}>
@@ -344,7 +385,7 @@ export default function Interview() {
                       <TableRow
                         key={app.id}
                         className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => navigate(`/applications/${app.id}`)}
+                        onClick={() => window.open(`/applications/${app.id}`, '_blank')}
                       >
                         <TableCell className="font-medium">{index + 1}</TableCell>
                         <TableCell>

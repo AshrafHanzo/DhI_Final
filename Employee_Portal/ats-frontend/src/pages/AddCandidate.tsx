@@ -31,6 +31,7 @@ export default function AddCandidate() {
   const [selectedJobForAssign, setSelectedJobForAssign] = useState('');
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
   const [sourcedFromOptions, setSourcedFromOptions] = useState<{ id: number, source_name: string }[]>([]);
+  const [selectedTalentBase, setSelectedTalentBase] = useState<number[]>([]);
 
   console.log('AddCandidate render - mode:', mode, 'candidates:', candidates?.length, 'jobs:', jobs?.length);
 
@@ -256,6 +257,63 @@ export default function AddCandidate() {
     }
   };
 
+  // -------- Talent Base Selection Handlers --------
+  const toggleSelectAllTalent = () => {
+    if (selectedTalentBase.length === filteredCandidates.length) {
+      setSelectedTalentBase([]);
+    } else {
+      setSelectedTalentBase(filteredCandidates.map((c: any) => c.id));
+    }
+  };
+
+  const toggleSelectTalent = (candidateId: number) => {
+    setSelectedTalentBase(prev =>
+      prev.includes(candidateId) ? prev.filter(id => id !== candidateId) : [...prev, candidateId]
+    );
+  };
+
+  // -------- Bulk Delete Talent Base Candidates --------
+  const handleBulkDeleteTalent = async () => {
+    if (selectedTalentBase.length === 0) {
+      toast({
+        title: 'Error',
+        description: 'Please select at least one candidate to delete',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to delete ${selectedTalentBase.length} candidate(s)? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await Promise.all(
+        selectedTalentBase.map(candidateId =>
+          fetch(buildApiUrl(API_ENDPOINTS.CANDIDATES, candidateId), {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+          })
+        )
+      );
+
+      await fetchCandidates();
+      await fetchApplications();
+      const count = selectedTalentBase.length;
+      setSelectedTalentBase([]);
+      toast({
+        title: 'Deleted',
+        description: `Successfully deleted ${count} candidate(s) from talent base`
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete some candidates',
+        variant: 'destructive'
+      });
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -396,6 +454,15 @@ export default function AddCandidate() {
               <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">Talent Base</h1>
               <p className="text-muted-foreground mt-1">Search and assign candidates to jobs</p>
             </div>
+            {/* Bulk Delete Button - Left Side */}
+            {isAdmin && selectedTalentBase.length > 0 && (
+              <div className="flex items-center gap-2 ml-4 pl-4 border-l">
+                <Button onClick={handleBulkDeleteTalent} size="sm" variant="destructive" className="gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  Delete ({selectedTalentBase.length})
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -494,6 +561,16 @@ export default function AddCandidate() {
                 <Table>
                   <TableHeader className="sticky top-0 bg-white z-10">
                     <TableRow>
+                      {isAdmin && (
+                        <TableHead className="w-[40px]">
+                          <input
+                            type="checkbox"
+                            checked={selectedTalentBase.length === filteredCandidates.length && filteredCandidates.length > 0}
+                            onChange={toggleSelectAllTalent}
+                            className="cursor-pointer"
+                          />
+                        </TableHead>
+                      )}
                       <TableHead className="w-[50px]">ID</TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead>Phone</TableHead>
@@ -507,7 +584,7 @@ export default function AddCandidate() {
                   <TableBody>
                     {filteredCandidates.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center text-gray-500 py-8">
+                        <TableCell colSpan={isAdmin ? 9 : 8} className="text-center text-gray-500 py-8">
                           No candidates found
                         </TableCell>
                       </TableRow>
@@ -518,6 +595,16 @@ export default function AddCandidate() {
                           className="hover:bg-gray-50 cursor-pointer"
                           onClick={() => navigate(`/candidates/${candidate.id}`)}
                         >
+                          {isAdmin && (
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={selectedTalentBase.includes(candidate.id)}
+                                onChange={() => toggleSelectTalent(candidate.id)}
+                                className="cursor-pointer"
+                              />
+                            </TableCell>
+                          )}
                           <TableCell className="font-medium">{candidate.id}</TableCell>
                           <TableCell>
                             <div className="font-medium">{candidate.full_name}</div>

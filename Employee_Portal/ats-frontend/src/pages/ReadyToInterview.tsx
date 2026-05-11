@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
-import { API_ENDPOINTS, buildApiUrl } from '@/config/api';
+import { API_ENDPOINTS, buildApiUrl, API_BASE_URL } from '@/config/api';
 
 export default function ReadyToInterview() {
   const navigate = useNavigate();
@@ -21,9 +21,35 @@ export default function ReadyToInterview() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [sourcedByFilter, setSourcedByFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [editingCandidate, setEditingCandidate] = useState<any>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [RECRUITERS, setRecruiters] = useState<string[]>([]);
+  const [READY_STATUSES, setReadyStatuses] = useState<string[]>([]);
+
+  // Fetch recruiters and ready-to-interview statuses from API
+  useEffect(() => {
+    const fetchAdminData = async () => {
+      try {
+        const [recruitersRes, statusesRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/admin/recruiters`),
+          fetch(`${API_BASE_URL}/api/admin/ready-to-interview-statuses`)
+        ]);
+        if (recruitersRes.ok) {
+          const data = await recruitersRes.json();
+          setRecruiters(data.filter((r: any) => r.is_active !== false).map((r: any) => r.name));
+        }
+        if (statusesRes.ok) {
+          const data = await statusesRes.json();
+          setReadyStatuses(data.filter((s: any) => s.is_active !== false).map((s: any) => s.name));
+        }
+      } catch (error) {
+        console.error('Error fetching admin data:', error);
+      }
+    };
+    fetchAdminData();
+  }, []);
   const [editForm, setEditForm] = useState({
     select_languages: [] as string[],
     educational_quality: '',
@@ -43,11 +69,11 @@ export default function ReadyToInterview() {
   const [interviewTime, setInterviewTime] = useState('');
   const [scheduling, setScheduling] = useState(false);
 
-  // Filter applications that are Ready To Interview - exclude Rejected and Interview Scheduled
+  // Filter applications that are Interested (Ready To Interview)
+  // Show all candidates except those moved to Interview Scheduled page (interview_status='Scheduled') or Rejected
   const readyApplications = useMemo(() => {
     return applications.filter((a: any) =>
-      a.screening_status === 'Ready To Interview' &&
-      (!a.interview_status || a.interview_status === 'Pending') &&
+      a.screening_status === 'Interested' &&
       a.interview_status !== 'Scheduled' &&
       a.interview_status !== 'Rejected'
     );
@@ -56,13 +82,15 @@ export default function ReadyToInterview() {
   // Count rejected candidates (they are in DB but hidden from UI)
   const rejectedCount = useMemo(() => {
     return applications.filter((a: any) =>
-      a.screening_status === 'Ready To Interview' &&
+      a.screening_status === 'Interested' &&
       a.interview_status === 'Rejected'
     ).length;
   }, [applications]);
 
   // Handle status update - opens date picker for scheduling
   const handleStatusUpdate = async (appId: number, interviewStatus: string, app?: any) => {
+    const previousStatus = app?.interview_status || 'Pending';
+
     if (interviewStatus === 'Scheduled') {
       // Open the scheduling dialog instead of immediately updating
       setSchedulingAppId(appId);
@@ -86,10 +114,45 @@ export default function ReadyToInterview() {
 
       await fetchApplications();
 
+      // Undo function
+      const handleUndo = async () => {
+        try {
+          await fetch(buildApiUrl(API_ENDPOINTS.APPLICATIONS, appId), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ interview_status: previousStatus })
+          });
+          await fetchApplications();
+          toast({
+            title: 'Undone',
+            description: `Status reverted to ${previousStatus}`
+          });
+        } catch (error) {
+          toast({
+            title: 'Error',
+            description: 'Failed to undo status change',
+            variant: 'destructive'
+          });
+        }
+      };
+
       if (interviewStatus === 'Rejected') {
         toast({
           title: 'Marked as Rejected',
-          description: 'Candidate hidden from list (retained in database)'
+          description: 'Candidate hidden from list (retained in database)',
+          action: <Button variant="outline" size="sm" onClick={handleUndo}>Undo</Button>
+        });
+      } else if (interviewStatus === 'Not Attended') {
+        toast({
+          title: 'Marked as Not Attended',
+          description: 'Candidate marked as not attended',
+          action: <Button variant="outline" size="sm" onClick={handleUndo}>Undo</Button>
+        });
+      } else {
+        toast({
+          title: 'Status Updated',
+          description: `Interview status updated to ${interviewStatus}`,
+          action: <Button variant="outline" size="sm" onClick={handleUndo}>Undo</Button>
         });
       }
     } catch (error) {
@@ -163,6 +226,16 @@ export default function ReadyToInterview() {
       filtered = filtered.filter((app: any) => app.sourced_by === sourcedByFilter);
     }
 
+    // Filter by status - works with any status from Admin Settings
+    if (statusFilter && statusFilter !== 'all') {
+      if (statusFilter === 'Pending') {
+        // Pending includes null/empty interview_status
+        filtered = filtered.filter((app: any) => !app.interview_status || app.interview_status === 'Pending');
+      } else {
+        filtered = filtered.filter((app: any) => app.interview_status === statusFilter);
+      }
+    }
+
     // Filter by search
     if (searchQuery) {
       filtered = filtered.filter((app: any) =>
@@ -174,18 +247,9 @@ export default function ReadyToInterview() {
     }
 
     return filtered;
-  }, [readyApplications, searchQuery, sourcedByFilter]);
+  }, [readyApplications, searchQuery, sourcedByFilter, statusFilter]);
 
-  const RECRUITERS = [
-    'Muni Divya',
-    'Surya K',
-    'Thameem Ansari',
-    'Nandhini Kumaravel',
-    'Dhivya V',
-    'Gokulakrishna V',
-    'Snehal Prakash',
-    'Selvaraj Veilumuthu'
-  ];
+  // RECRUITERS is now fetched from API via useEffect
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-';
@@ -341,6 +405,19 @@ export default function ReadyToInterview() {
                     ))}
                   </SelectContent>
                 </Select>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-full sm:w-[180px]">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    {READY_STATUSES.filter(s => s !== 'Scheduled' && s !== 'Rejected').map((status) => (
+                      <SelectItem key={status} value={status}>
+                        {status === 'Pending' ? '⏳ ' : status === 'Not Attended' ? '⚠️ ' : ''}{status}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </CardContent>
           </Card>
@@ -385,7 +462,7 @@ export default function ReadyToInterview() {
                             <TableCell className="font-medium">{index + 1}</TableCell>
                             <TableCell
                               className="cursor-pointer"
-                              onClick={() => navigate(`/applications/${app.id}`)}
+                              onClick={() => window.open(`/applications/${app.id}`, '_blank')}
                             >
                               <div className="font-medium">{app.candidate_name}</div>
                               <div className="text-xs text-gray-500">{app.candidate_city}</div>
@@ -403,14 +480,22 @@ export default function ReadyToInterview() {
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="Pending">Pending</SelectItem>
-                                  <SelectItem value="Scheduled">
-                                    <span className="flex items-center gap-2">
-                                      <Calendar className="h-4 w-4 text-blue-500" />
-                                      Interview Scheduled
-                                    </span>
-                                  </SelectItem>
-                                  <SelectItem value="Rejected">Rejected</SelectItem>
+                                  {READY_STATUSES.map((status) => (
+                                    <SelectItem key={status} value={status}>
+                                      {status === 'Scheduled' ? (
+                                        <span className="flex items-center gap-2">
+                                          <Calendar className="h-4 w-4 text-blue-500" />
+                                          Interview Scheduled
+                                        </span>
+                                      ) : status === 'Not Attended' ? (
+                                        <span className="flex items-center gap-2">
+                                          ⚠️ {status}
+                                        </span>
+                                      ) : (
+                                        status
+                                      )}
+                                    </SelectItem>
+                                  ))}
                                 </SelectContent>
                               </Select>
                             </TableCell>
@@ -495,11 +580,12 @@ export default function ReadyToInterview() {
                 <GraduationCap className="h-5 w-5 text-blue-600" />
                 Educational Qualification
               </Label>
-              <Select value={editForm.educational_quality} onValueChange={(val) => setEditForm({ ...editForm, educational_quality: val })}>
+              <Select value={editForm.educational_quality} onValueChange={(val) => setEditForm({ ...editForm, educational_quality: val === '_none_' ? '' : val })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select education level" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="_none_">❌ None (Clear)</SelectItem>
                   <SelectItem value="Below 10th">Below 10th</SelectItem>
                   <SelectItem value="10th Pass">10th Pass</SelectItem>
                   <SelectItem value="12th Pass">12th Pass</SelectItem>
@@ -625,11 +711,12 @@ export default function ReadyToInterview() {
                 <MapPin className="h-5 w-5 text-violet-600" />
                 Preferred Work Mode
               </Label>
-              <Select value={editForm.preferred_work_types} onValueChange={(val) => setEditForm({ ...editForm, preferred_work_types: val })}>
+              <Select value={editForm.preferred_work_types} onValueChange={(val) => setEditForm({ ...editForm, preferred_work_types: val === '_none_' ? '' : val })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select work mode" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="_none_">❌ None (Clear)</SelectItem>
                   <SelectItem value="Remote">🏠 Remote</SelectItem>
                   <SelectItem value="Office">🏢 Office</SelectItem>
                   <SelectItem value="Hybrid">🔄 Hybrid</SelectItem>
@@ -744,8 +831,8 @@ export default function ReadyToInterview() {
                       variant="outline"
                       onClick={() => setInterviewDate(dateStr)}
                       className={`h-12 transition-all duration-300 ${isSelected
-                          ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0 shadow-lg scale-[1.02]'
-                          : 'hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:border-purple-300'
+                        ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0 shadow-lg scale-[1.02]'
+                        : 'hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:border-purple-300'
                         }`}
                     >
                       <span className="mr-2">{icon}</span>

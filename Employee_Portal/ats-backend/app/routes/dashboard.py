@@ -29,7 +29,7 @@ async def dashboard():
             (SELECT COUNT(*) FROM applications WHERE screening_status = 'Not Reachable' AND (applied_on IS NULL OR applied_on != '{exclude_date}')) AS screening_not_reachable,
             (SELECT COUNT(*) FROM applications WHERE screening_status = 'Wrong Number' AND (applied_on IS NULL OR applied_on != '{exclude_date}')) AS screening_wrong_number,
             (SELECT COUNT(*) FROM applications WHERE screening_status = 'Ringing No Response' AND (applied_on IS NULL OR applied_on != '{exclude_date}')) AS screening_ringing,
-            (SELECT COUNT(*) FROM applications WHERE screening_status = 'Ready To Interview' AND (applied_on IS NULL OR applied_on != '{exclude_date}')) AS screening_ready,
+            (SELECT COUNT(*) FROM applications WHERE screening_status = 'Interested' AND (applied_on IS NULL OR applied_on != '{exclude_date}')) AS screening_ready,
             (SELECT COUNT(*) FROM applications WHERE screening_status = 'Not Fit' AND (applied_on IS NULL OR applied_on != '{exclude_date}')) AS screening_not_fit,
             (SELECT COUNT(*) FROM applications WHERE screening_status = 'Not Interested' AND (applied_on IS NULL OR applied_on != '{exclude_date}')) AS screening_not_interested,
             
@@ -85,33 +85,53 @@ async def recruiter_stats(period: str = "all"):
         # Exclude applications from 2025-11-28
         exclude_date = "2025-11-28"
         
-        # Build date filter based on period
-        date_filter = ""
+        # Build date filter condition for FILTER clause
+        date_condition = ""
         if period == "today":
-            date_filter = "AND DATE(applied_on) = CURRENT_DATE"
+            date_condition = "AND DATE(applied_on) = CURRENT_DATE"
         elif period == "week":
-            date_filter = "AND applied_on >= CURRENT_DATE - INTERVAL '7 days'"
+            date_condition = "AND applied_on >= CURRENT_DATE - INTERVAL '7 days'"
         elif period == "month":
-            date_filter = "AND applied_on >= DATE_TRUNC('month', CURRENT_DATE)"
+            date_condition = "AND applied_on >= DATE_TRUNC('month', CURRENT_DATE)"
         elif period == "year":
-            date_filter = "AND applied_on >= DATE_TRUNC('year', CURRENT_DATE)"
-        # 'all' means no date filter for period, but still exclude 2025-11-28
+            date_condition = "AND applied_on >= DATE_TRUNC('year', CURRENT_DATE)"
+        # 'all' means no additional date filter
         
-        sql = f"""
+        # Query for recruiter-attributed applications - show ALL recruiters regardless of time period
+        sql_recruiters = f"""
         SELECT 
             sourced_by as recruiter,
-            COUNT(*) FILTER (WHERE applied_on IS NULL OR applied_on != '{exclude_date}') as total_applications,
-            COUNT(*) FILTER (WHERE screening_status = 'Ready To Interview' AND (applied_on IS NULL OR applied_on != '{exclude_date}')) as ready_to_interview,
-            COUNT(*) FILTER (WHERE interview_status = 'Selected') as selected,
-            COUNT(*) FILTER (WHERE joined_status = 'Joined') as joined
+            COUNT(*) FILTER (WHERE (applied_on IS NULL OR applied_on != '{exclude_date}') {date_condition}) as total_applications,
+            COUNT(*) FILTER (WHERE screening_status = 'Interested' AND (applied_on IS NULL OR applied_on != '{exclude_date}') {date_condition}) as ready_to_interview,
+            COUNT(*) FILTER (WHERE interview_status = 'Selected' {date_condition}) as selected,
+            COUNT(*) FILTER (WHERE joined_status = 'Joined' {date_condition}) as joined
         FROM applications
         WHERE sourced_by IS NOT NULL AND sourced_by != ''
-        {date_filter}
         GROUP BY sourced_by
         ORDER BY total_applications DESC;
         """
-        result = await fetch_all(sql)
-        return result if result else []
+        
+        # Query for organic/unassigned applications (no sourced_by)
+        sql_organic = f"""
+        SELECT 
+            'Organic (Unassigned)' as recruiter,
+            COUNT(*) FILTER (WHERE (applied_on IS NULL OR applied_on != '{exclude_date}') {date_condition}) as total_applications,
+            COUNT(*) FILTER (WHERE screening_status = 'Interested' AND (applied_on IS NULL OR applied_on != '{exclude_date}') {date_condition}) as ready_to_interview,
+            COUNT(*) FILTER (WHERE interview_status = 'Selected' {date_condition}) as selected,
+            COUNT(*) FILTER (WHERE joined_status = 'Joined' {date_condition}) as joined
+        FROM applications
+        WHERE sourced_by IS NULL OR sourced_by = '';
+        """
+        
+        recruiter_result = await fetch_all(sql_recruiters) or []
+        organic_result = await fetch_all(sql_organic) or []
+        
+        # Combine results - include all recruiters and organic applications
+        result = list(recruiter_result)
+        if organic_result and len(organic_result) > 0:
+            result.append(organic_result[0])
+        
+        return result
     except Exception as e:
         print(f"Recruiter stats error: {e}")
         return []

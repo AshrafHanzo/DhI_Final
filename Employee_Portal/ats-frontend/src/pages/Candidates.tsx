@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Phone, Mail, MapPin, Briefcase, Building2, Search, Eye, Edit, GraduationCap, Languages, Clock, Code, Factory, Calendar, Loader2, CheckCircle2, Database } from 'lucide-react';
+import { Plus, Phone, Mail, MapPin, Briefcase, Building2, Search, Eye, Edit, GraduationCap, Languages, Clock, Code, Factory, Calendar, Loader2, CheckCircle2, Database, Trash2, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { API_ENDPOINTS, buildApiUrl } from '@/config/api';
+import { API_ENDPOINTS, buildApiUrl, API_BASE_URL } from '@/config/api';
 
 const statusColors: any = {
   new: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
@@ -34,6 +34,7 @@ export default function Candidates() {
   const [jobInput, setJobInput] = useState('');
   const [showJobSuggestions, setShowJobSuggestions] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [selectedCandidates, setSelectedCandidates] = useState<number[]>([]);
   const [editForm, setEditForm] = useState({
     full_name: '',
     fathers_name: '',
@@ -56,6 +57,29 @@ export default function Candidates() {
     preferred_employment_types: [] as string[],
     preferred_work_types: ''
   });
+
+  // Dynamic sources from Admin Settings
+  const [SOURCES, setSources] = useState<string[]>([]);
+  const [sourcePopupOpen, setSourcePopupOpen] = useState<'today' | 'yesterday' | null>(null);
+  const [popupData, setPopupData] = useState<{ label: string; counts: { source: string; count: number }[] }>({ label: '', counts: [] });
+
+  // Fetch sources from API
+  useEffect(() => {
+    const fetchSources = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/admin/sourced-from`);
+        if (res.ok) {
+          const data = await res.json();
+          setSources(data.filter((s: any) => s.is_active !== false).map((s: any) => s.name));
+        }
+      } catch (error) {
+        console.error('Error fetching sources:', error);
+        // Fallback to default sources if API fails
+        setSources(['Meta', 'Linked-in', 'Job hai', 'Apna', 'EarlyJobs', 'Others']);
+      }
+    };
+    fetchSources();
+  }, []);
 
   // Get job options for autocomplete
   const jobOptions = useMemo(() => {
@@ -108,7 +132,7 @@ export default function Candidates() {
     });
   }, [candidates, searchQuery, applications, jobs]);
 
-  // Repopulate form when editing candidate changes
+  // Repopulate form when editing candidate changes - only trigger on candidate/dialog change, NOT on data refresh
   useEffect(() => {
     if (editingCandidate && editDialogOpen) {
       console.log('Populating edit form with candidate data:', editingCandidate);
@@ -145,7 +169,8 @@ export default function Candidates() {
         setJobInput('');
       }
     }
-  }, [editingCandidate, editDialogOpen, applications, jobs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingCandidate?.id, editDialogOpen]);
 
   const handleEdit = (candidate: any, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -331,14 +356,139 @@ export default function Candidates() {
     }
   };
 
+  // Selection handlers for bulk delete
+  const toggleSelectAll = () => {
+    if (selectedCandidates.length === filteredCandidates.length) {
+      setSelectedCandidates([]);
+    } else {
+      setSelectedCandidates(filteredCandidates.map((c: any) => c.id));
+    }
+  };
+
+  const toggleSelectCandidate = (candidateId: number) => {
+    setSelectedCandidates(prev =>
+      prev.includes(candidateId) ? prev.filter(id => id !== candidateId) : [...prev, candidateId]
+    );
+  };
+
+  // Bulk delete candidates handler
+  const handleBulkDelete = async () => {
+    if (selectedCandidates.length === 0) {
+      toast({
+        title: 'Error',
+        description: 'Please select at least one candidate to delete',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to delete ${selectedCandidates.length} candidate(s)? This will also delete their applications. This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await Promise.all(
+        selectedCandidates.map(candidateId =>
+          fetch(buildApiUrl(API_ENDPOINTS.CANDIDATES, candidateId), {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+          })
+        )
+      );
+
+      await fetchCandidates();
+      await fetchApplications();
+      const count = selectedCandidates.length;
+      setSelectedCandidates([]);
+      toast({
+        title: 'Deleted',
+        description: `Successfully deleted ${count} candidate(s)`
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete some candidates',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Download resumes for selected candidates
+  const handleDownloadResumes = async () => {
+    if (selectedCandidates.length === 0) {
+      toast({
+        title: 'Error',
+        description: 'Please select at least one candidate',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const selectedCandidateData = candidates.filter((c: any) => selectedCandidates.includes(c.id));
+    const candidatesWithResume = selectedCandidateData.filter((c: any) => c.resume_url);
+
+    if (candidatesWithResume.length === 0) {
+      toast({
+        title: 'No Resumes',
+        description: 'None of the selected candidates have resumes uploaded',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    toast({
+      title: 'Downloading',
+      description: `Downloading ${candidatesWithResume.length} resume(s)...`
+    });
+
+    // Download each resume with proper download behavior
+    for (let i = 0; i < candidatesWithResume.length; i++) {
+      const candidate = candidatesWithResume[i];
+      try {
+        // Add delay between downloads to prevent browser blocking
+        await new Promise(resolve => setTimeout(resolve, i * 800));
+
+        const response = await fetch(`${API_BASE_URL}${candidate.resume_url}`);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${candidate.full_name}_resume.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } catch (error) {
+        console.error(`Failed to download resume for ${candidate.full_name}:`, error);
+      }
+    }
+
+    toast({
+      title: 'Complete',
+      description: `Downloaded ${candidatesWithResume.length} resume(s)`
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">Candidates</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage all candidates - Total: {candidates.length}
-          </p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">Candidates</h1>
+            <p className="text-muted-foreground mt-1">
+              Manage all candidates - Total: {candidates.length}
+            </p>
+          </div>
+          {/* Download Resumes Button */}
+          {selectedCandidates.length > 0 && (
+            <div className="flex items-center gap-2 ml-4 pl-4 border-l">
+              <Button onClick={handleDownloadResumes} size="sm" variant="outline" className="gap-2 border-blue-500 text-blue-600 hover:bg-blue-50">
+                <Download className="h-4 w-4" />
+                Download Resumes ({selectedCandidates.length})
+              </Button>
+            </div>
+          )}
         </div>
 
         <div className="flex gap-3">
@@ -355,17 +505,24 @@ export default function Candidates() {
 
       {/* Compact Statistics Bar */}
       {(() => {
-        // Calculate today and yesterday dates
+        // Calculate today and yesterday dates in local timezone
         const today = new Date();
-        today.setHours(0, 0, 0, 0);
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
 
-        const todayStr = today.toISOString().split('T')[0];
-        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        // Format as YYYY-MM-DD in local timezone
+        const formatLocalDate = (date: Date) => {
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        };
 
-        // Source categories to track
-        const sources = ['Meta', 'LinkedIn', 'Job hai', 'Apna', 'EarlyJobs', 'Others'];
+        const todayStr = formatLocalDate(today);
+        const yesterdayStr = formatLocalDate(yesterday);
+
+        // Source categories to track (from Admin Settings)
+        const sources = SOURCES.length > 0 ? SOURCES : ['Meta', 'Linked-in', 'Job hai', 'Apna', 'EarlyJobs', 'Others'];
 
         // Calculate source counts
         const getSourceCount = (dateStr: string, source: string) => {
@@ -386,63 +543,128 @@ export default function Candidates() {
         const totalToday = todayCounts.reduce((sum, s) => sum + s.count, 0);
         const totalYesterday = yesterdayCounts.reduce((sum, s) => sum + s.count, 0);
 
-        const sourceColors: Record<string, string> = {
-          'Meta': 'text-blue-600 bg-blue-50',
-          'LinkedIn': 'text-sky-600 bg-sky-50',
-          'Job hai': 'text-orange-600 bg-orange-50',
-          'Apna': 'text-purple-600 bg-purple-50',
-          'EarlyJobs': 'text-green-600 bg-green-50',
-          'Others': 'text-gray-600 bg-gray-50',
+        // Color palette for sources (handles dynamic sources)
+        const colorPalette = [
+          'text-blue-600 bg-blue-50',
+          'text-sky-600 bg-sky-50',
+          'text-orange-600 bg-orange-50',
+          'text-purple-600 bg-purple-50',
+          'text-green-600 bg-green-50',
+          'text-pink-600 bg-pink-50',
+          'text-indigo-600 bg-indigo-50',
+          'text-amber-600 bg-amber-50',
+          'text-cyan-600 bg-cyan-50',
+          'text-gray-600 bg-gray-50',
+        ];
+
+        const getSourceColor = (source: string, index: number) => {
+          return colorPalette[index % colorPalette.length];
+        };
+
+        const MAX_VISIBLE = 6;
+        const todayVisible = todayCounts.slice(0, MAX_VISIBLE);
+        const yesterdayVisible = yesterdayCounts.slice(0, MAX_VISIBLE);
+        const todayHasMore = todayCounts.length > MAX_VISIBLE;
+        const yesterdayHasMore = yesterdayCounts.length > MAX_VISIBLE;
+
+        const openSourcePopup = (type: 'today' | 'yesterday') => {
+          setPopupData({
+            label: type === 'today' ? `Today (${totalToday})` : `Yesterday (${totalYesterday})`,
+            counts: type === 'today' ? todayCounts : yesterdayCounts
+          });
+          setSourcePopupOpen(type);
         };
 
         return (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Total Candidates + Today */}
-            <Card className="border-2">
-              <CardContent className="py-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="text-center px-4 border-r">
-                      <div className="text-2xl font-bold text-blue-600">{candidates.length}</div>
-                      <p className="text-xs text-muted-foreground">Total</p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-4 w-4 text-emerald-600" />
-                      <span className="text-sm font-medium text-emerald-600">Today ({totalToday})</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {todayCounts.map(({ source, count }) => (
-                      <div key={source} className={`text-center px-2 py-1 rounded-lg ${sourceColors[source]}`}>
-                        <div className="text-sm font-bold">{count}</div>
-                        <p className="text-[10px]">{source}</p>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Total Candidates + Today */}
+              <Card className="border-2">
+                <CardContent className="py-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="text-center px-4 border-r">
+                        <div className="text-2xl font-bold text-blue-600">{candidates.length}</div>
+                        <p className="text-xs text-muted-foreground">Total</p>
                       </div>
-                    ))}
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-4 w-4 text-emerald-600" />
+                        <span className="text-sm font-medium text-emerald-600">Today ({totalToday})</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {todayVisible.map(({ source, count }, index) => (
+                        <div key={source} className={`text-center px-2 py-1 rounded-lg ${getSourceColor(source, index)}`}>
+                          <div className="text-sm font-bold">{count}</div>
+                          <p className="text-[10px]">{source}</p>
+                        </div>
+                      ))}
+                      {todayHasMore && (
+                        <button
+                          onClick={() => openSourcePopup('today')}
+                          className="text-center px-2 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-medium transition-colors"
+                        >
+                          +{todayCounts.length - MAX_VISIBLE}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            {/* Yesterday */}
-            <Card className="border-2">
-              <CardContent className="py-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-4 w-4 text-amber-600" />
-                    <span className="text-sm font-medium text-amber-600">Yesterday ({totalYesterday})</span>
+              {/* Yesterday */}
+              <Card className="border-2">
+                <CardContent className="py-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1">
+                      <Clock className="h-4 w-4 text-amber-600" />
+                      <span className="text-sm font-medium text-amber-600">Yesterday ({totalYesterday})</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {yesterdayVisible.map(({ source, count }, index) => (
+                        <div key={source} className={`text-center px-2 py-1 rounded-lg ${getSourceColor(source, index)}`}>
+                          <div className="text-sm font-bold">{count}</div>
+                          <p className="text-[10px]">{source}</p>
+                        </div>
+                      ))}
+                      {yesterdayHasMore && (
+                        <button
+                          onClick={() => openSourcePopup('yesterday')}
+                          className="text-center px-2 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-medium transition-colors"
+                        >
+                          +{yesterdayCounts.length - MAX_VISIBLE}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {yesterdayCounts.map(({ source, count }) => (
-                      <div key={source} className={`text-center px-2 py-1 rounded-lg ${sourceColors[source]}`}>
-                        <div className="text-sm font-bold">{count}</div>
-                        <p className="text-[10px]">{source}</p>
-                      </div>
-                    ))}
-                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Source Stats Popup Dialog */}
+            <Dialog open={sourcePopupOpen !== null} onOpenChange={() => setSourcePopupOpen(null)}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    {sourcePopupOpen === 'today' ? (
+                      <Calendar className="h-5 w-5 text-emerald-600" />
+                    ) : (
+                      <Clock className="h-5 w-5 text-amber-600" />
+                    )}
+                    Source Breakdown - {popupData.label}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="grid grid-cols-3 gap-3 py-4">
+                  {popupData.counts.map(({ source, count }, index) => (
+                    <div key={source} className={`text-center p-3 rounded-lg ${getSourceColor(source, index)}`}>
+                      <div className="text-xl font-bold">{count}</div>
+                      <p className="text-xs font-medium">{source}</p>
+                    </div>
+                  ))}
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              </DialogContent>
+            </Dialog>
+          </>
         );
       })()}
 
@@ -473,6 +695,14 @@ export default function Candidates() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
+                <TableHead className="w-[40px]">
+                  <input
+                    type="checkbox"
+                    checked={selectedCandidates.length === filteredCandidates.length && filteredCandidates.length > 0}
+                    onChange={toggleSelectAll}
+                    className="cursor-pointer"
+                  />
+                </TableHead>
                 <TableHead className="font-bold">S.No</TableHead>
                 <TableHead className="font-bold">Name</TableHead>
                 <TableHead className="font-bold">Contact</TableHead>
@@ -493,8 +723,16 @@ export default function Candidates() {
                   <TableRow
                     key={candidate.id}
                     className="cursor-pointer hover:bg-muted/50 transition-colors"
-                    onClick={() => navigate(`/candidates/${candidate.id}`)}
+                    onClick={() => window.open(`/candidates/${candidate.id}`, '_blank')}
                   >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedCandidates.includes(candidate.id)}
+                        onChange={() => toggleSelectCandidate(candidate.id)}
+                        className="cursor-pointer"
+                      />
+                    </TableCell>
                     <TableCell>
                       <div className="font-medium">{index + 1}</div>
                     </TableCell>
@@ -547,7 +785,7 @@ export default function Candidates() {
                           size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigate(`/candidates/${candidate.id}`);
+                            window.open(`/candidates/${candidate.id}`, '_blank');
                           }}
                         >
                           <Eye className="h-4 w-4" />
@@ -780,11 +1018,12 @@ export default function Candidates() {
                       <GraduationCap className="h-4 w-4 text-blue-600" />
                       Educational Qualification
                     </Label>
-                    <Select value={editForm.educational_quality} onValueChange={(value) => setEditForm(prev => ({ ...prev, educational_quality: value }))}>
+                    <Select value={editForm.educational_quality} onValueChange={(value) => setEditForm(prev => ({ ...prev, educational_quality: value === '_none_' ? '' : value }))}>
                       <SelectTrigger className="bg-white">
                         <SelectValue placeholder="Select education level" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="_none_">❌ None (Clear)</SelectItem>
                         <SelectItem value="Secondary Education">🎓 Secondary Education (10th)</SelectItem>
                         <SelectItem value="Higher Secondary Education">🎓 Higher Secondary Education (12th)</SelectItem>
                         <SelectItem value="ITI">🔧 ITI</SelectItem>
@@ -917,11 +1156,12 @@ export default function Candidates() {
                           <MapPin className="h-4 w-4 text-violet-600" />
                           Preferred Work Mode
                         </Label>
-                        <Select value={editForm.preferred_work_types} onValueChange={(value) => setEditForm(prev => ({ ...prev, preferred_work_types: value }))}>
+                        <Select value={editForm.preferred_work_types} onValueChange={(value) => setEditForm(prev => ({ ...prev, preferred_work_types: value === '_none_' ? '' : value }))}>
                           <SelectTrigger className="bg-white">
                             <SelectValue placeholder="Select work mode" />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value="_none_">❌ None (Clear)</SelectItem>
                             <SelectItem value="Remote">🏠 Remote</SelectItem>
                             <SelectItem value="Onsite">🏢 Onsite</SelectItem>
                             <SelectItem value="Hybrid">🔄 Hybrid</SelectItem>

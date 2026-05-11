@@ -12,6 +12,7 @@ from app.routes.candidates import router as candidates_router
 from app.routes.applications import router as applications_router
 from app.routes.dashboard import router as dashboard_router
 from app.routes.masters import router as masters_router
+from app.routes.admin import router as admin_router
 from fastapi.staticfiles import StaticFiles
 
 from fastapi import Request
@@ -49,6 +50,7 @@ app = FastAPI(
         {"name": "Applications", "description": "Job applications & pipeline"},
         {"name": "Dashboard", "description": "ATS analytics & summary"},
         {"name": "Masters", "description": "Master data management"},
+        {"name": "Admin", "description": "Admin settings & configuration"},
     ]
 )
 
@@ -57,7 +59,15 @@ app = FastAPI(
 # ---------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],      # Allow all frontend domains
+    allow_origins=[
+        "https://dhicreativeservices.com",
+        "https://www.dhicreativeservices.com",
+        "https://portal.dhicreativeservices.com",
+        "https://api.dhicreativeservices.com",
+        "http://localhost:8080",
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -73,18 +83,14 @@ app.include_router(candidates_router, prefix="/api/candidates", tags=["Candidate
 app.include_router(applications_router, prefix="/api/applications", tags=["Applications"])
 app.include_router(dashboard_router, prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(masters_router, prefix="/api/masters", tags=["Masters"])
+app.include_router(admin_router, prefix="/api/admin", tags=["Admin"])
 # Mount the uploads directory from Employee_Portal/uploads - use absolute path
 import os
 UPLOADS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "uploads"))
 app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
-# If you want request logging middleware, define like this:
-@app.middleware("http")
-async def log_request_middleware(request: Request, call_next):
-    body = await request.body()
-    print("Request Body:", body)
-    response = await call_next(request)
-    return response
+# Request logging middleware REMOVED - it was consuming the body stream
+# and causing POST requests to hang. Do not add body reading middleware.
 
 # ---------------------------
 # STARTUP

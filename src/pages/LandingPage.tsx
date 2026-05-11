@@ -47,7 +47,7 @@ const LandingPage = () => {
     if (window.fbq) {
       window.fbq('track', 'PageView');
     }
-    
+
     // Fetch active jobs from backend
     fetchJobs();
   }, []);
@@ -57,46 +57,44 @@ const LandingPage = () => {
       console.log("Fetching jobs from API...");
       const response = await fetch("https://api.dhicreativeservices.com/api/jobs/");
       console.log("Response status:", response.status);
-      
+
       if (response.ok) {
         const data = await response.json();
         console.log("All jobs from API:", data);
         console.log("Total jobs received:", data.length);
-        
-        // Filter for the specific 4 jobs (exact match from database)
+
+        // Filter for the specific 4 jobs (normalized to lowercase)
         const targetJobs = [
-          { title: "Customer Service", company: "Shaadi.com" },
-          { title: "Tele Sales", company: "Eureka" },
-          { title: "Business Development", company: "SuperNova" },
-          { title: "Outbond Sales", company: "Cogent" }  // Note: "Outbond" not "Outbound"
+          { title: "customer service", company: "shaadi.com" },
+          { title: "tele sales", company: "eureka" },
+          { title: "business development", company: "supernova" },
+          { title: "outbond sales", company: "cogent" }
         ];
-        
+
         const filteredJobs = data.filter((job: Job) => {
-          // Normalize by removing extra spaces and converting to lowercase
-          const jobTitle = (job.job_title || '').replace(/\s+/g, ' ').toLowerCase().trim();
-          const companyName = (job.company_name || job.company || '').replace(/\s+/g, ' ').toLowerCase().trim();
-          
+          // Normalize by removing extra spaces/newlines and converting to lowercase
+          const jobTitle = (job.job_title || '').replace(/[\s\n\r]+/g, ' ').toLowerCase().trim();
+          const companyName = (job.company_name || job.company || '').replace(/[\s\n\r]+/g, ' ').toLowerCase().trim();
+
           const isMatch = targetJobs.some(target => {
-            const targetTitle = target.title.replace(/\s+/g, ' ').toLowerCase().trim();
-            const targetCompany = target.company.replace(/\s+/g, ' ').toLowerCase().trim();
-            const matches = jobTitle === targetTitle && companyName === targetCompany;
-            
+            const matches = jobTitle === target.title && companyName === target.company;
+
             if (matches) {
               console.log(`✓ Matched: "${job.job_title}" - "${job.company_name || job.company}"`);
             }
-            
+
             return matches;
           });
-          
+
           return isMatch;
         });
-        
+
         console.log("Filtered jobs:", filteredJobs);
         console.log("Filtered jobs count:", filteredJobs.length);
-        
+
         // Verify all 4 target jobs are found
         targetJobs.forEach(target => {
-          const found = filteredJobs.find(j => 
+          const found = filteredJobs.find(j =>
             j.job_title.toLowerCase().trim() === target.title.toLowerCase().trim() &&
             (j.company_name || j.company || '').toLowerCase().trim() === target.company.toLowerCase().trim()
           );
@@ -104,7 +102,7 @@ const LandingPage = () => {
             console.warn(`⚠ Missing: "${target.title}" - "${target.company}"`);
           }
         });
-        
+
         setJobs(filteredJobs);
       } else {
         console.error("API response not OK:", response.status);
@@ -185,7 +183,7 @@ const LandingPage = () => {
       if (!response.ok) {
         throw new Error("Failed to submit application");
       }
-      
+
       // Track successful submission with Facebook Pixel
       if (window.fbq && selectedJob) {
         window.fbq('track', 'Lead', {
@@ -379,7 +377,7 @@ const LandingPage = () => {
           </Button>
         </form>
 
-        
+
       </div>
     </div>
   );

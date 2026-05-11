@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
 import { Button } from '@/components/ui/button';
@@ -22,16 +22,8 @@ import {
   Award
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { API_ENDPOINTS, buildApiUrl } from '@/config/api';
+import { API_ENDPOINTS, buildApiUrl, API_BASE_URL } from '@/config/api';
 
-const JOINED_STATUSES = [
-  'Joined',
-  'Left'
-];
-
-const FILTER_STATUSES = [
-  'Joined'
-];
 
 export default function Joined() {
   const navigate = useNavigate();
@@ -40,23 +32,39 @@ export default function Joined() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sourcedByFilter, setSourcedByFilter] = useState('all');
+  const [RECRUITERS, setRecruiters] = useState<string[]>([]);
+  const [JOINED_STATUSES, setJoinedStatuses] = useState<string[]>([]);
 
-  const RECRUITERS = [
-    'Muni Divya',
-    'Surya K',
-    'Thameem Ansari',
-    'Nandhini Kumaravel',
-    'Dhivya V',
-    'Gokulakrishna V',
-    'Snehal Prakash',
-    'Selvaraj Veilumuthu'
-  ];
+  // Fetch recruiters and joined statuses from API
+  useEffect(() => {
+    const fetchAdminData = async () => {
+      try {
+        const [recruitersRes, statusesRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/admin/recruiters`),
+          fetch(`${API_BASE_URL}/api/admin/joined-statuses`)
+        ]);
+
+        if (recruitersRes.ok) {
+          const data = await recruitersRes.json();
+          setRecruiters(data.filter((r: any) => r.is_active !== false).map((r: any) => r.name));
+        }
+
+        if (statusesRes.ok) {
+          const data = await statusesRes.json();
+          setJoinedStatuses(data.filter((s: any) => s.is_active !== false).map((s: any) => s.name));
+        }
+      } catch (error) {
+        console.error('Error fetching admin data:', error);
+      }
+    };
+    fetchAdminData();
+  }, []);
 
   // Filter applications with "Joined" main status
-  // Show only "Joined" status, hide "Left" and "Not Joined" from UI
+  // Show all joined candidates except those with 'Left' status (hidden from UI but retained in database)
   const joinedApplications = useMemo(() => {
     return applications.filter((a: any) =>
-      a.status === 'Joined' && a.joined_status === 'Joined'
+      a.status === 'Joined' && a.joined_status !== 'Left'
     );
   }, [applications]);
 
@@ -358,7 +366,7 @@ export default function Joined() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Status</SelectItem>
-                    {FILTER_STATUSES.map((status) => (
+                    {JOINED_STATUSES.filter(s => s !== 'Left').map((status) => (
                       <SelectItem key={status} value={status}>{status}</SelectItem>
                     ))}
                   </SelectContent>
@@ -429,7 +437,7 @@ export default function Joined() {
                               className="hover:bg-gray-50 cursor-pointer"
                               onClick={() => {
                                 if (app.candidate_id) {
-                                  navigate(`/candidates/${app.candidate_id}`);
+                                  window.open(`/candidates/${app.candidate_id}`, '_blank');
                                 }
                               }}
                             >

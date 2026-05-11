@@ -1,6 +1,6 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { LogOut, Briefcase, Users, TrendingUp, Lock, FileText, BarChart3 } from 'lucide-react';
+import { LogOut, Briefcase, Users, TrendingUp, Lock, FileText, BarChart3, Settings } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -43,6 +43,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <NavLink to="/recruiter-dashboard" icon={<BarChart3 className="h-4 w-4" />}>
             Recruiter Dashboard
           </NavLink>
+          {user?.role === 'admin' && (
+            <NavLink to="/admin-settings" icon={<Settings className="h-4 w-4" />}>
+              Admin Settings
+            </NavLink>
+          )}
           {user?.role === 'owner' && (
             <NavLink to="/lockin" icon={<Lock className="h-4 w-4" />}>
               Lock-in Tracking

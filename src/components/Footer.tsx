@@ -35,7 +35,7 @@ const Footer = () => {
     { name: "Digital Publishing", href: "/digital-publishing", isExternal: true },
     { name: "Premedia Services", href: "/premedia-services", isExternal: true },
     { name: "Image Production", href: "/premedia-services", isExternal: true },
-    { name: "CGI & 3D Rendering", href: "/cgi-rendering", isExternal: true },
+    { name: "CGI & 3D Rendering", href: "/premedia-services", isExternal: true },
   ];
 
   return (

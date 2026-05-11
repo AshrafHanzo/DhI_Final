@@ -7,10 +7,10 @@ from typing import Any, Dict, List, Optional, Union
 
 # ---------- Environment ----------
 PG_HOST = os.getenv("PGHOST", "103.14.123.44")
-PG_PORT = os.getenv("PGPORT", "30018")
-PG_DB   = os.getenv("PGDATABASE", "postgres")
-PG_USER = os.getenv("PGUSER", "dhi_admin")
-PG_PASS = os.getenv("PGPASSWORD", "dhi@123")
+PG_PORT = os.getenv("PGPORT", "5432")
+PG_DB   = os.getenv("PGDATABASE", "dhi")
+PG_USER = os.getenv("PGUSER", "sql_developer")
+PG_PASS = os.getenv("PGPASSWORD", "Dev@123")
 PG_SCHEMA = os.getenv("PGSCHEMA", "dhi")
 PG_SSLMODE = os.getenv("PGSSLMODE", "disable")
 

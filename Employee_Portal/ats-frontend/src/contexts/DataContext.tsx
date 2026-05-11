@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { Job, Candidate ,Application} from "@/types";
+import { Job, Candidate, Application } from "@/types";
 import { API_ENDPOINTS, buildApiUrl } from "@/config/api";
 
 interface DataContextType {
@@ -54,10 +54,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         console.error("Candidates API error:", res.status, errorText);
         throw new Error("Failed to fetch candidates");
       }
-  
+
       const data = await res.json();
       console.log('Fetched candidates from API:', data.length, 'candidates');
-  
+
       // MAP BACKEND → FRONTEND NAMING - include ALL fields
       const mapped = data.map((c: any) => ({
         id: c.id,
@@ -87,7 +87,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         preferred_employment_types: c.preferred_employment_types,
         preferred_work_types: c.preferred_work_types,
       }));
-  
+
       console.log('Mapped candidates:', mapped);
       setCandidates(mapped);
     } catch (err) {
@@ -95,8 +95,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setCandidates([]);
     }
   };
-  
-  
+
+
   const fetchApplications = async () => {
     try {
       console.log('[DataContext] Fetching applications from:', API_ENDPOINTS.APPLICATIONS);
@@ -105,7 +105,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         console.error('[DataContext] Applications fetch failed:', res.status, res.statusText);
         throw new Error("Failed to fetch applications");
       }
-  
+
       const data = await res.json();
       console.log('[DataContext] Applications fetched successfully:', data.length, 'applications');
       setApplications(data);
@@ -114,7 +114,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setApplications([]); // Set empty array on error instead of leaving undefined
     }
   };
-  
+
   // ======================================================
   // CREATE JOB
   // ======================================================
@@ -139,7 +139,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const addCandidate = async (formData: FormData) => {
     try {
       console.log('Sending candidate to backend...');
-      
+
       const res = await fetch(API_ENDPOINTS.CANDIDATES, {
         method: "POST",
         body: formData, // no headers for FormData
@@ -157,7 +157,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       // Refresh all data to ensure consistency
       await fetchCandidates();
       await fetchApplications();
-      
+
       console.log('Data refreshed after adding candidate');
     } catch (err) {
       console.error("Add candidate error:", err);
@@ -171,7 +171,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const addApplication = async (payload: any) => {
     try {
       console.log('Creating application...', payload);
-      
+
       const res = await fetch(API_ENDPOINTS.APPLICATIONS, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -189,7 +189,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       // Refresh applications after adding
       await fetchApplications();
-      
+
       console.log('Applications refreshed after adding');
     } catch (err) {
       console.error("Add application error:", err);
@@ -225,12 +225,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   // ======================================================
-  // INITIAL LOAD
+  // INITIAL LOAD + AUTO-REFRESH
   // ======================================================
   useEffect(() => {
+    // Initial load
     fetchJobs();
     fetchCandidates();
-    fetchApplications(); 
+    fetchApplications();
+
+    // Auto-refresh every 30 seconds to pick up new applications
+    const refreshInterval = setInterval(() => {
+      console.log('[DataContext] Auto-refreshing data...');
+      fetchApplications();
+      fetchCandidates();
+      fetchJobs();
+    }, 30000); // 30 seconds
+
+    // Cleanup interval on unmount
+    return () => clearInterval(refreshInterval);
   }, []);
 
   return (
